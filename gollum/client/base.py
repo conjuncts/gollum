@@ -12,4 +12,3 @@ class GollumClient:
         :param worklist: 
         """
         self.worklist = worklist
-        

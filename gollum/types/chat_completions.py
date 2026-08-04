@@ -1,173 +1,51 @@
-from typing import Literal, Union, Optional, List, Dict, Any
-from typing_extensions import TypedDict, NotRequired
 
 
-# ---------- Messages ----------
+from typing import TYPE_CHECKING, List, Literal, NotRequired, Optional, TypeAlias, TypedDict
 
-class FunctionCall(TypedDict):
-    name: str
-    arguments: str  # JSON-encoded string
+if TYPE_CHECKING:
+    # basic messages
+    from openai.types.chat import ChatCompletionMessageParam  # noqa: F401
+    from openai.types.chat import ChatCompletionAssistantMessageParam
 
+    # basic request params
+    from openai.types.chat.completion_create_params import CompletionCreateParamsBase  # noqa: F401
 
-class ToolCallFunction(TypedDict):
-    name: str
-    arguments: str  # JSON-encoded string
-
-
-class ToolCall(TypedDict):
-    id: str
-    type: Literal["function"]
-    function: ToolCallFunction
-
-
-class TextContentPart(TypedDict):
-    type: Literal["text"]
-    text: str
+    # basic response - note: only BaseModel is available
+    from openai.types.chat.chat_completion import ChatCompletion  # noqa: F401
+else:
+    ChatCompletionMessageParam = dict
+    ChatCompletionAssistantMessageParam = dict
+    CompletionCreateParamsBase = dict
+    ChatCompletion = dict
 
 
-class ImageURL(TypedDict):
-    url: str
-    detail: NotRequired[Literal["auto", "low", "high"]]
+ChatCompletionMessage: TypeAlias = "ChatCompletionMessageParam"
+ChatCompletionRequest: TypeAlias = "CompletionCreateParamsBase"
+ChatCompletionResponse: TypeAlias = "ChatCompletion"
 
 
-class ImageContentPart(TypedDict):
-    type: Literal["image_url"]
-    image_url: ImageURL
+class AnthropicThinkingParam(TypedDict, total=False):
+    type: Literal["enabled", "adaptive"]
+    budget_tokens: int
 
 
-ContentPart = Union[TextContentPart, ImageContentPart]
+
+class OpenAIWebSearchUserLocationApproximate(TypedDict):
+    city: str
+    country: str
+    region: str
+    timezone: str
 
 
-class SystemMessage(TypedDict):
-    role: Literal["system"]
-    content: str
-    name: NotRequired[str]
+class OpenAIWebSearchUserLocation(TypedDict):
+    approximate: OpenAIWebSearchUserLocationApproximate
+    type: Literal["approximate"]
 
 
-class UserMessage(TypedDict):
-    role: Literal["user"]
-    content: Union[str, List[ContentPart]]
-    name: NotRequired[str]
+class OpenAIWebSearchOptions(TypedDict, total=False):
+    search_context_size: Optional[Literal["low", "medium", "high"]]
+    user_location: Optional[OpenAIWebSearchUserLocation]
 
-
-class AssistantMessage(TypedDict):
-    role: Literal["assistant"]
-    content: NotRequired[Optional[str]]
-    name: NotRequired[str]
-    function_call: NotRequired[FunctionCall]      # deprecated, legacy
-    tool_calls: NotRequired[List[ToolCall]]
-    refusal: NotRequired[Optional[str]]
-
-
-class ToolMessage(TypedDict):
-    role: Literal["tool"]
-    content: str
-    tool_call_id: str
-
-
-class FunctionMessage(TypedDict):  # deprecated, legacy
-    role: Literal["function"]
-    content: str
-    name: str
-
-
-Message = Union[
-    SystemMessage,
-    UserMessage,
-    AssistantMessage,
-    ToolMessage,
-    FunctionMessage,
-]
-
-
-# ---------- Tools / Functions ----------
-
-class FunctionDefinition(TypedDict):
-    name: str
-    description: NotRequired[str]
-    parameters: NotRequired[Dict[str, Any]]  # JSON Schema
-    strict: NotRequired[Optional[bool]]
-
-
-class Tool(TypedDict):
-    type: Literal["function"]
-    function: FunctionDefinition
-
-
-class ToolChoiceFunction(TypedDict):
-    name: str
-
-
-class NamedToolChoice(TypedDict):
-    type: Literal["function"]
-    function: ToolChoiceFunction
-
-
-ToolChoice = Union[Literal["none", "auto", "required"], NamedToolChoice]
-
-
-# ---------- Response format ----------
-
-class JSONSchemaSpec(TypedDict):
-    name: str
-    description: NotRequired[str]
-    schema: NotRequired[Dict[str, Any]]
-    strict: NotRequired[Optional[bool]]
-
-
-class ResponseFormatText(TypedDict):
-    type: Literal["text"]
-
-
-class ResponseFormatJSONObject(TypedDict):
-    type: Literal["json_object"]
-
-
-class ResponseFormatJSONSchema(TypedDict):
-    type: Literal["json_schema"]
-    json_schema: JSONSchemaSpec
-
-
-ResponseFormat = Union[
-    ResponseFormatText, ResponseFormatJSONObject, ResponseFormatJSONSchema
-]
-
-
-# ---------- Streaming options ----------
-
-class StreamOptions(TypedDict):
-    include_usage: NotRequired[bool]
-
-
-# ---------- Request ----------
-
-class ChatCompletionRequest(TypedDict):
-    model: str
-    messages: List[Message]
-    frequency_penalty: NotRequired[Optional[float]]
-    logit_bias: NotRequired[Optional[Dict[str, int]]]
-    logprobs: NotRequired[Optional[bool]]
-    top_logprobs: NotRequired[Optional[int]]
-    max_tokens: NotRequired[Optional[int]]  # deprecated in favor of max_completion_tokens
-    max_completion_tokens: NotRequired[Optional[int]]
-    n: NotRequired[Optional[int]]
-    presence_penalty: NotRequired[Optional[float]]
-    response_format: NotRequired[ResponseFormat]
-    seed: NotRequired[Optional[int]]
-    service_tier: NotRequired[Optional[Literal["auto", "default"]]]
-    stop: NotRequired[Optional[Union[str, List[str]]]]
-    stream: NotRequired[Optional[bool]]
-    stream_options: NotRequired[Optional[StreamOptions]]
-    temperature: NotRequired[Optional[float]]
-    top_p: NotRequired[Optional[float]]
-    tools: NotRequired[List[Tool]]
-    tool_choice: NotRequired[ToolChoice]
-    parallel_tool_calls: NotRequired[bool]
-    user: NotRequired[str]
-
-    # deprecated legacy fields
-    functions: NotRequired[List[FunctionDefinition]]
-    function_call: NotRequired[Union[Literal["none", "auto"], ToolChoiceFunction]]
 
 
 # ---------- Response ----------
@@ -192,7 +70,7 @@ class Logprobs(TypedDict):
 
 class Choice(TypedDict):
     index: int
-    message: AssistantMessage
+    message: "ChatCompletionAssistantMessageParam"
     logprobs: NotRequired[Optional[Logprobs]]
     finish_reason: Optional[
         Literal["stop", "length", "tool_calls", "content_filter", "function_call"]
@@ -227,47 +105,3 @@ class ChatCompletionResponse(TypedDict):
     usage: NotRequired[Usage]
     system_fingerprint: NotRequired[str]
     service_tier: NotRequired[Optional[str]]
-
-
-# ---------- Streaming chunk ----------
-
-class DeltaToolCallFunction(TypedDict):
-    name: NotRequired[str]
-    arguments: NotRequired[str]
-
-
-class DeltaToolCall(TypedDict):
-    index: int
-    id: NotRequired[str]
-    type: NotRequired[Literal["function"]]
-    function: NotRequired[DeltaToolCallFunction]
-
-
-class Delta(TypedDict):
-    role: NotRequired[Literal["system", "user", "assistant", "tool"]]
-    content: NotRequired[Optional[str]]
-    tool_calls: NotRequired[List[DeltaToolCall]]
-    refusal: NotRequired[Optional[str]]
-
-
-class StreamChoice(TypedDict):
-    index: int
-    delta: Delta
-    logprobs: NotRequired[Optional[Logprobs]]
-    finish_reason: Optional[
-        Literal["stop", "length", "tool_calls", "content_filter", "function_call"]
-    ]
-
-
-class ChatCompletionChunk(TypedDict):
-    id: str
-    object: Literal["chat.completion.chunk"]
-    created: int
-    model: str
-    choices: List[StreamChoice]
-    usage: NotRequired[Optional[Usage]]
-    system_fingerprint: NotRequired[str]
-    service_tier: NotRequired[Optional[str]]
-
-
-# Polars
