@@ -1,6 +1,6 @@
+
 import polars as pl
 
-from gollum.types.chat_completions import ChatCompletionRequest
 
 # ---------- Reusable nested structs ----------
 
@@ -273,13 +273,3 @@ df_responses = pl.DataFrame(schema=ChatCompletionResponseSchema)
 # df_responses = pl.read_json("responses.json", schema=ChatCompletionResponseSchema)
 # or for one dict:
 # df = pl.DataFrame([response_dict], schema=ChatCompletionResponseSchema)
-
-def completion_to_pl_serializable(data: ChatCompletionRequest) -> dict:
-    """
-    Converts a ChatCompletionRequest to a dictionary that is serializable by Polars.
-    """
-
-def pl_serializable_to_completion(data: dict) -> ChatCompletionRequest:
-    """
-    Converts a dictionary to a ChatCompletionRequest.
-    """

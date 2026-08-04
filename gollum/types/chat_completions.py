@@ -94,14 +94,3 @@ class Usage(TypedDict):
     total_tokens: int
     completion_tokens_details: NotRequired[CompletionTokensDetails]
     prompt_tokens_details: NotRequired[PromptTokensDetails]
-
-
-class ChatCompletionResponse(TypedDict):
-    id: str
-    object: Literal["chat.completion"]
-    created: int
-    model: str
-    choices: List[Choice]
-    usage: NotRequired[Usage]
-    system_fingerprint: NotRequired[str]
-    service_tier: NotRequired[Optional[str]]
