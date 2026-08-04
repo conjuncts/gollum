@@ -1,5 +1,7 @@
 import polars as pl
 
+from gollum.types.chat_completions import ChatCompletionRequest
+
 # ---------- Reusable nested structs ----------
 
 text_content_part = pl.Struct({
@@ -92,33 +94,117 @@ stream_options = pl.Struct({
     "include_usage": pl.Boolean,
 })
 
+# ---------- Audio ----------
+
+# voice is polymorphic (built-in name | {"id": str}) — split like tool_choice
+audio_voice_id = pl.Struct({
+    "id": pl.Utf8,
+})
+
+audio = pl.Struct({
+    "format": pl.Utf8,        # "wav"|"aac"|"mp3"|"flac"|"opus"|"pcm16"
+    "voice_str": pl.Utf8,     # built-in voice name
+    "voice_id": audio_voice_id,
+})
+
+# ---------- Metadata / dicts ----------
+
+# OpenAI metadata is Dict[str, str] — store as list of entries, like logit_bias
+metadata_entry = pl.Struct({
+    "key": pl.Utf8,
+    "value": pl.Utf8,
+})
+
+# ---------- Function call (deprecated) ----------
+
+function_call_option = pl.Struct({
+    "name": pl.Utf8,
+})
+
+# function_call is polymorphic ("none"|"auto" | {"name": str}) — split like tool_choice:
+# function_call_str: pl.Utf8
+# function_call_named: function_call_option
+
+# ---------- Prediction ----------
+
+prediction = pl.Struct({
+    "type": pl.Utf8,          # "content"
+    "content": pl.Utf8,       # or use content_parts below when content is a list
+    "content_parts": pl.List(pl.Struct({
+        "type": pl.Utf8,      # "text"
+        "text": pl.Utf8,
+    })),
+})
+
+# ---------- Moderation ----------
+
+moderation = pl.Struct({
+    "model": pl.Utf8,
+    "policy_input_mode": pl.Utf8,    # "score" | "block"
+    "policy_output_mode": pl.Utf8,   # "score" | "block"
+})
+
+# ---------- Prompt cache ----------
+
+prompt_cache_options = pl.Struct({
+    "mode": pl.Utf8,          # "implicit" | "explicit"
+    "ttl": pl.Utf8,           # "30m"
+})
+
+# ---------- Web search ----------
+
+web_search_options = pl.Struct({
+    "search_context_size": pl.Utf8,   # "low" | "medium" | "high"
+    "user_location_type": pl.Utf8,    # "approximate"
+    "city": pl.Utf8,
+    "country": pl.Utf8,
+    "region": pl.Utf8,
+    "timezone": pl.Utf8,
+})
+
 # ---------- ChatCompletionRequest schema ----------
 
 ChatCompletionRequestSchema = pl.Schema({
-    "model": pl.Utf8,
+    # required fields first, then alphabetical — matches OpenAI
     "messages": pl.List(message),
+    "model": pl.Utf8,
+    "audio": audio,
     "frequency_penalty": pl.Float64,
+    "function_call_str": pl.Utf8,              # "none" | "auto" (deprecated)
+    "function_call_named": function_call_option,
+    "functions": pl.List(function_definition),  # deprecated
     "logit_bias": pl.List(pl.Struct({"token_id": pl.Utf8, "bias": pl.Int64})),
     "logprobs": pl.Boolean,
-    "top_logprobs": pl.Int64,
-    "max_tokens": pl.Int64,
     "max_completion_tokens": pl.Int64,
+    "max_tokens": pl.Int64,
+    "metadata": pl.List(metadata_entry),        # Dict[str, str] → list of entries
+    "modalities": pl.List(pl.Utf8),             # "text" | "audio"
+    "moderation": moderation,
     "n": pl.Int64,
+    "parallel_tool_calls": pl.Boolean,
+    "prediction": prediction,
     "presence_penalty": pl.Float64,
+    "prompt_cache_key": pl.Utf8,
+    "prompt_cache_options": prompt_cache_options,
+    "prompt_cache_retention": pl.Utf8,          # "in_memory" | "24h" (deprecated)
+    "reasoning_effort": pl.Utf8,                # "none"|"minimal"|"low"|"medium"|"high"|"xhigh"|"max"
     "response_format": response_format,
+    "safety_identifier": pl.Utf8,
     "seed": pl.Int64,
     "service_tier": pl.Utf8,
-    "stop": pl.List(pl.Utf8),         # normalize str|list[str] into a list
+    "stop": pl.List(pl.Utf8),                   # normalize str|list[str] into a list
+    "store": pl.Boolean,
     "stream": pl.Boolean,
     "stream_options": stream_options,
     "temperature": pl.Float64,
-    "top_p": pl.Float64,
-    "tools": pl.List(tool),
-    "tool_choice_str": pl.Utf8,       # "none" | "auto" | "required"
+    "tool_choice_str": pl.Utf8,                 # "none" | "auto" | "required"
     "tool_choice_named": named_tool_choice,
-    "parallel_tool_calls": pl.Boolean,
+    "tools": pl.List(tool),
+    "top_logprobs": pl.Int64,
+    "top_p": pl.Float64,
     "user": pl.Utf8,
-    "functions": pl.List(function_definition),  # deprecated
+    "verbosity": pl.Utf8,                       # "low" | "medium" | "high"
+    "web_search_options": web_search_options,
 })
 
 # ---------- ChatCompletionResponse schema ----------
@@ -187,3 +273,13 @@ df_responses = pl.DataFrame(schema=ChatCompletionResponseSchema)
 # df_responses = pl.read_json("responses.json", schema=ChatCompletionResponseSchema)
 # or for one dict:
 # df = pl.DataFrame([response_dict], schema=ChatCompletionResponseSchema)
+
+def completion_to_pl_serializable(data: ChatCompletionRequest) -> dict:
+    """
+    Converts a ChatCompletionRequest to a dictionary that is serializable by Polars.
+    """
+
+def pl_serializable_to_completion(data: dict) -> ChatCompletionRequest:
+    """
+    Converts a dictionary to a ChatCompletionRequest.
+    """

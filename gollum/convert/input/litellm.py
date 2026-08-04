@@ -87,6 +87,8 @@ def litellm_completion_to_request(
     chat_completion: ChatCompletionRequest = {
         "messages": messages,
         "model": model,
+    }
+    optional = {
         "audio": audio,
         "frequency_penalty": frequency_penalty,
         "function_call": function_call,
@@ -123,6 +125,8 @@ def litellm_completion_to_request(
         "verbosity": verbosity,
         "web_search_options": web_search_options
     }
+    optional = {k: v for k, v in optional.items() if v is not None}
+    chat_completion.update(optional)
     gollum_request = GollumRequest(
         request=chat_completion,
         extras={
@@ -138,8 +142,6 @@ def litellm_completion_to_request(
             "shared_session": shared_session,
             "enable_json_schema_validation": enable_json_schema_validation
         },
-        metadata={
-            "metadata": metadata
-        },
+        metadata={},
     )
     return gollum_request
