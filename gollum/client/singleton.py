@@ -1,9 +1,19 @@
+"""
+A global client
+
+"""
+
+from gollum.client.base import GollumClient
+from gollum.client.litellm import LiteLLMWorklistEntry
+from gollum.convert.input.litellm import litellm_completion_to_request
+
 from typing import TYPE_CHECKING, Dict, Iterable, List, Literal, Optional, Type, Union
 
 import httpx
 
-from gollum.types import GollumRequest
-from gollum.types.chat_completions import AnthropicThinkingParam, ChatCompletionRequest, OpenAIWebSearchOptions
+from gollum.types.chat_completions import AnthropicThinkingParam, OpenAIWebSearchOptions
+from gollum.worklist.workers.mock_worker import MockWorker
+from gollum.worklist.worklist import EagerWorklist
 
 if TYPE_CHECKING:
     from openai.types.chat import (
@@ -20,7 +30,16 @@ if TYPE_CHECKING:
     from pydantic import BaseModel
 
 
-def litellm_completion_to_request(
+_singleton = None
+def get_singleton_client() -> GollumClient:
+    global _singleton
+    if _singleton is None:
+        worklist = EagerWorklist()
+        worklist.enroll_worker(MockWorker(parroted_value="Hello, World!"))
+        _singleton = GollumClient(worklist)
+    return _singleton
+
+def acompletion(
     model: str,
     # Optional OpenAI params: see https://platform.openai.com/docs/api-reference/chat/create
     messages: Iterable["ChatCompletionMessageParam"] = None,
@@ -33,7 +52,7 @@ def litellm_completion_to_request(
     stop=None,
     max_completion_tokens: Optional[int] = None,
     max_tokens: Optional[int] = None,
-    modalities: Optional[list["ChatCompletionModality"]] = None,
+    modalities: Optional[List["ChatCompletionModality"]] = None,
     prediction: Optional["ChatCompletionPredictionContentParam"] = None,
     audio: Optional["ChatCompletionAudioParam"] = None,
     presence_penalty: Optional[float] = None,
@@ -79,69 +98,59 @@ def litellm_completion_to_request(
     prompt_cache_retention: Optional[Literal["in_memory", "24h"]] = None,
     # store: Optional[bool] = None, # soon to be deprecated: related to openai's fine tuning api
     **kwargs,
-) -> GollumRequest:
+):
     """
-    Exact method signature, nearly identical to `completion` in litellm 1.95.0
-    Compatible with `client.chat.completions.create` in openai 2.37.0
+    1-to-1 to litellm
     """
-    chat_completion: ChatCompletionRequest = {
-        "messages": messages,
-        "model": model,
-    }
-    optional = {
-        "audio": audio,
-        "frequency_penalty": frequency_penalty,
-        "function_call": function_call,
-        "functions": functions,
-        "logit_bias": logit_bias,
-        "logprobs": logprobs,
-        "max_completion_tokens": max_completion_tokens,
-        "max_tokens": max_tokens,
-        "metadata": metadata,
-        "modalities": modalities,
-        "moderation": moderation,
-        "n": n,
-        "parallel_tool_calls": parallel_tool_calls,
-        "prediction": prediction,
-        "presence_penalty": presence_penalty,
-        "prompt_cache_key": prompt_cache_key,
-        "prompt_cache_options": prompt_cache_options,
-        "prompt_cache_retention": prompt_cache_retention,
-        "reasoning_effort": reasoning_effort,
-        "response_format": response_format,
-        "safety_identifier": safety_identifier,
-        "seed": seed,
-        "service_tier": service_tier,
-        "stop": stop,
-        "store": None,
-        "stream": stream,
-        "stream_options": stream_options,
-        "temperature": temperature,
-        "tool_choice": tool_choice,
-        "tools": tools,
-        "top_logprobs": top_logprobs,
-        "top_p": top_p,
-        "user": user,
-        "verbosity": verbosity,
-        "web_search_options": web_search_options
-    }
-    optional = {k: v for k, v in optional.items() if v is not None}
-    chat_completion.update(optional)
-    gollum_request = GollumRequest(
-        request=chat_completion,
-        extras={
-            "timeout": timeout,
-            "include_server_side_tool_invocations": include_server_side_tool_invocations,
-            "deployment_id": deployment_id,
-            "extra_headers": extra_headers,
-            "base_url": base_url,
-            "api_version": api_version,
-            "api_key": api_key,
-            "model_list": model_list,
-            "thinking": thinking,
-            "shared_session": shared_session,
-            "enable_json_schema_validation": enable_json_schema_validation
-        },
-        metadata={},
+    request = litellm_completion_to_request(
+        model=model,
+        messages=messages,
+        timeout=timeout,
+        temperature=temperature,
+        top_p=top_p,
+        n=n,
+        stream=stream,
+        stream_options=stream_options,
+        stop=stop,
+        max_completion_tokens=max_completion_tokens,
+        max_tokens=max_tokens,
+        modalities=modalities,
+        prediction=prediction,
+        audio=audio,
+        presence_penalty=presence_penalty,
+        frequency_penalty=frequency_penalty,
+        logit_bias=logit_bias,
+        user=user,
+        reasoning_effort=reasoning_effort,
+        verbosity=verbosity,
+        response_format=response_format,
+        seed=seed,
+        tools=tools,
+        tool_choice=tool_choice,
+        logprobs=logprobs,
+        top_logprobs=top_logprobs,
+        parallel_tool_calls=parallel_tool_calls,
+        web_search_options=web_search_options,
+        include_server_side_tool_invocations=include_server_side_tool_invocations,
+        deployment_id=deployment_id,
+        extra_headers=extra_headers,
+        safety_identifier=safety_identifier,
+        service_tier=service_tier,
+        functions=functions,
+        function_call=function_call,
+        base_url=base_url,
+        api_version=api_version,
+        api_key=api_key,
+        model_list=model_list,
+        thinking=thinking,
+        shared_session=shared_session,
+        enable_json_schema_validation=enable_json_schema_validation,
+        metadata=metadata,
+        moderation=moderation,
+        prompt_cache_key=prompt_cache_key,
+        prompt_cache_options=prompt_cache_options,
+        prompt_cache_retention=prompt_cache_retention,
+        **kwargs,
     )
-    return gollum_request
+    worklist_entry = get_singleton_client().worklist.enroll(request)
+    return LiteLLMWorklistEntry(worklist_entry)

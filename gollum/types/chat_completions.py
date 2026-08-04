@@ -21,7 +21,9 @@ else:
 
 ChatCompletionMessage: TypeAlias = "ChatCompletionMessageParam"
 ChatCompletionRequest: TypeAlias = "CompletionCreateParamsBase"
-ChatCompletionResponse: TypeAlias = "ChatCompletion"
+ChatCompletionResponseModel: TypeAlias = "ChatCompletion"
+
+
 
 
 class AnthropicThinkingParam(TypedDict, total=False):
@@ -53,28 +55,28 @@ class OpenAIWebSearchOptions(TypedDict, total=False):
 class TopLogprob(TypedDict):
     token: str
     logprob: float
-    bytes: Optional[List[int]]
+    bytes: Optional[list[int]]
 
 
 class LogprobContent(TypedDict):
     token: str
     logprob: float
-    bytes: Optional[List[int]]
-    top_logprobs: List[TopLogprob]
+    bytes: Optional[list[int]]
+    top_logprobs: list[TopLogprob]
 
 
 class Logprobs(TypedDict):
-    content: Optional[List[LogprobContent]]
-    refusal: Optional[List[LogprobContent]]
+    content: Optional[list[LogprobContent]]
+    refusal: Optional[list[LogprobContent]]
 
 
 class Choice(TypedDict):
-    index: int
-    message: "ChatCompletionAssistantMessageParam"
-    logprobs: NotRequired[Optional[Logprobs]]
     finish_reason: Optional[
         Literal["stop", "length", "tool_calls", "content_filter", "function_call"]
     ]
+    index: int
+    logprobs: NotRequired[Optional[Logprobs]]
+    message: "ChatCompletionAssistantMessageParam"
 
 
 class CompletionTokensDetails(TypedDict):
@@ -94,3 +96,14 @@ class Usage(TypedDict):
     total_tokens: int
     completion_tokens_details: NotRequired[CompletionTokensDetails]
     prompt_tokens_details: NotRequired[PromptTokensDetails]
+
+
+class ChatCompletionResponse(TypedDict):
+    id: str
+    object: Literal["chat.completion"]
+    created: int
+    model: str
+    choices: List[Choice]
+    usage: NotRequired[Usage]
+    system_fingerprint: NotRequired[str]
+    service_tier: NotRequired[Optional[str]]

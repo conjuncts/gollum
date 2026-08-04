@@ -1,5 +1,4 @@
-
-from gollum.worklist.base import Worklist
+from gollum.worklist.worklist import Worklist
 
 
 class GollumClient:
@@ -12,3 +11,4 @@ class GollumClient:
         :param worklist: 
         """
         self.worklist = worklist
+

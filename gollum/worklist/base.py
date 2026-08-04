@@ -1,7 +1,10 @@
 import asyncio
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from gollum.types import GollumRequest, GollumResponse
+
+if TYPE_CHECKING:
+    from gollum.worklist.worklist import Worklist
 
 
 class WorklistEntry:
@@ -11,7 +14,7 @@ class WorklistEntry:
     def __init__(self, request: GollumRequest, worklist: "Worklist"):
         self.request = request
         # self.payload = None
-        self.worklist: Worklist = worklist
+        self.worklist: "Worklist" = worklist
         self.status: Literal["starting", "in_progress", "done"] = "starting"
         # self.permacache_key = None
         # self.permacache_likely_partition = None
@@ -33,27 +36,5 @@ class WorklistEntry:
     async def wait(self) -> GollumResponse:
         return await self._future
 
-class Worklist:
-    """
-    Producer-consumer pattern
-    """
-
-    def __init__(self):
-        self.entries = []
-
-    def enroll(self, request: GollumRequest) -> WorklistEntry:
-        """
-        Enroll a request to be processed later
-        :param request:
-        :return:
-        """
-        entry = WorklistEntry(request, self)
-        self.entries.append(entry)
-        return entry
-
-    # A llm provider should pop an entry, process it, attach the payload, and then mark it as done.
-    # The worklist can then be set to null.
-    # On the other hand, a WorklistEntry should have a hook that allows it to be awaited on demand
-
-    def get_event_loop(self):
-        return asyncio.get_running_loop()
+    def __await__(self):
+        return self.wait().__await__()
