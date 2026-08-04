@@ -469,3 +469,12 @@ def test_sample(sample_index):
     as_polars = completion_to_pl_serializable(orig)
     as_original = pl_serializable_to_completion(as_polars)
     assert as_original == orig
+
+
+def test_stop_not_round_trip():
+    orig = {"model": "gpt-4o", "messages": [{"role": "user", "content": "Test"}], "stop": "5"}
+    expected = orig.copy()
+    expected["stop"] = ["5"]
+    as_polars = completion_to_pl_serializable(orig)
+    as_original = pl_serializable_to_completion(as_polars)
+    assert as_original == expected
