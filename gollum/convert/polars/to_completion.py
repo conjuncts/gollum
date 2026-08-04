@@ -8,17 +8,24 @@
 # dict) and Polars needs a single fixed struct. Each has a `_to_flat`
 # (OpenAI -> Polars-serializable) and `_from_flat` (Polars -> OpenAI)
 # counterpart so the split stays symmetric and easy to audit.
+#
+# NOTE: This does not distinguish unset fields and null, and in that case,
+# round trip behavior may not be perfect (null values will be dropped on round trip).
+# 
+# NOTE: another instance where round trip behavior may be slightly different:
+# list with only one item vs simply that item (unnested)
 # ============================================================
 
 import json
+from typing import Optional
 
 from gollum.types.chat_completions import ChatCompletionRequest
 
 
-def _set_if_present(out: dict, key: str, value) -> None:
+def _set_if_present(out: dict, key: str, value, *, allow_null=False) -> None:
     """Only add `key` to `out` when `value` is not None/empty, so we don't
     reintroduce nulled-out optional fields OpenAI never expects to see."""
-    if value is not None:
+    if value is not None or allow_null:
         out[key] = value
 
 
@@ -90,7 +97,7 @@ def _message_to_flat(msg: dict) -> dict:
 def _message_from_flat(msg: dict) -> dict:
     out = {"role": msg.get("role")}
     content = _join_content(msg.get("content"), msg.get("content_parts"))
-    _set_if_present(out, "content", content)
+    _set_if_present(out, "content", content, allow_null=True)
     _set_if_present(out, "name", msg.get("name"))
     _set_if_present(out, "tool_calls", msg.get("tool_calls") or None)
     _set_if_present(out, "tool_call_id", msg.get("tool_call_id"))
@@ -224,10 +231,11 @@ def _stop_to_list(stop):
     return None
 
 
-def _stop_from_list(stop_list):
-    if not stop_list:
-        return None
-    return stop_list[0] if len(stop_list) == 1 else stop_list
+def _stop_from_list(stop_list: Optional[list[str]]) -> Optional[list[str]]:
+    """
+    NOTE: not full round-trip support, because [item] -> item.
+    """
+    return stop_list
 
 
 # ---------- audio.voice: str | {"id": str} ----------
@@ -366,13 +374,13 @@ def completion_to_pl_serializable(data: ChatCompletionRequest) -> dict:
     tools = data.get("tools")
 
     return {
-        "messages": [_message_to_flat(m) for m in messages] if messages else None,
+        "messages": [_message_to_flat(m) for m in messages] if messages is not None else None,
         "model": data.get("model"),
         "audio": _audio_to_flat(data.get("audio")),
         "frequency_penalty": data.get("frequency_penalty"),
         "function_call_str": function_call_str,
         "function_call_named": function_call_named,
-        "functions": [_function_definition_to_flat(f) for f in functions] if functions else None,
+        "functions": [_function_definition_to_flat(f) for f in functions] if functions is not None else None,
         "logit_bias": _logit_bias_to_list(data.get("logit_bias")),
         "logprobs": data.get("logprobs"),
         "max_completion_tokens": data.get("max_completion_tokens"),
@@ -399,7 +407,7 @@ def completion_to_pl_serializable(data: ChatCompletionRequest) -> dict:
         "temperature": data.get("temperature"),
         "tool_choice_str": tool_choice_str,
         "tool_choice_named": tool_choice_named,
-        "tools": [_tool_to_flat(t) for t in tools] if tools else None,
+        "tools": [_tool_to_flat(t) for t in tools] if tools is not None else None,
         "top_logprobs": data.get("top_logprobs"),
         "top_p": data.get("top_p"),
         "user": data.get("user"),
@@ -419,7 +427,7 @@ def pl_serializable_to_completion(data: dict) -> ChatCompletionRequest:
     out: dict = {}
 
     messages = data.get("messages")
-    if messages:
+    if messages is not None:
         out["messages"] = [_message_from_flat(m) for m in messages]
     _set_if_present(out, "model", data.get("model"))
     _set_if_present(out, "audio", _audio_from_flat(data.get("audio")))
@@ -429,7 +437,7 @@ def pl_serializable_to_completion(data: dict) -> ChatCompletionRequest:
     _set_if_present(out, "function_call", function_call)
 
     functions = data.get("functions")
-    if functions:
+    if functions is not None:
         out["functions"] = [_function_definition_from_flat(f) for f in functions]
 
     _set_if_present(out, "logit_bias", _logit_bias_from_list(data.get("logit_bias")))
@@ -461,7 +469,7 @@ def pl_serializable_to_completion(data: dict) -> ChatCompletionRequest:
     _set_if_present(out, "tool_choice", tool_choice)
 
     tools = data.get("tools")
-    if tools:
+    if tools is not None:
         out["tools"] = [_tool_from_flat(t) for t in tools]
 
     _set_if_present(out, "top_logprobs", data.get("top_logprobs"))

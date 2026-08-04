@@ -22,6 +22,12 @@ from gollum.types.chat_completions import ChatCompletionRequest
 # =========================================================================
 
 sample_requests: list[ChatCompletionRequest] = [
+    # --- 0. Empty request ------------------------------------------------
+    {
+        "model": "gpt-3.5-turbo",
+        "messages": [],
+    },
+
     # --- 1. Minimal: only the two required fields -----------------------
     {
         "model": "gpt-3.5-turbo",
@@ -142,7 +148,7 @@ sample_requests: list[ChatCompletionRequest] = [
     {
         "model": "gpt-4o-mini",
         "messages": [{"role": "user", "content": "Count to 5."}],
-        "stop": "5",
+        "stop": ["5"],  # NOTE: string on its own would not be fully roundtrip: "5" --> ["5"]
         "stream": True,
     },
 
