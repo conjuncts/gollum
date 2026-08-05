@@ -17,7 +17,7 @@ class Worklist:
         self.entries = []
         self.workers: list[Worker] = []
 
-    def enroll(self, request: GollumRequest) -> WorklistEntry:
+    async def enroll(self, request: GollumRequest) -> WorklistEntry:
         """
         Enroll a request to be processed later
         :param request:
@@ -25,7 +25,7 @@ class Worklist:
         """
         entry = WorklistEntry(request, self)
         self.entries.append(entry)
-        self.kickstart_work()
+        await self.kickstart_work()
         return entry
 
     # A llm provider should pop an entry, process it, attach the payload, and then mark it as done.
@@ -38,8 +38,10 @@ class Worklist:
     def enroll_worker(self, worker: Worker):
         self.workers.append(worker)
 
-    def kickstart_work(self):
-        # Start processing the entries
+    async def kickstart_work(self):
+        """
+        Start processing the entries
+        """
         pass
 
 
@@ -48,12 +50,12 @@ class EagerWorklist(Worklist):
     Simple, no-concurrency worklist where immediately processes entries.
     """
 
-    def kickstart_work(self):
+    async def kickstart_work(self):
         # simply use the first worker
         if not self.workers:
             raise ValueError("No workers available to process entries.")
         worker = self.workers[0]
         while self.entries:
             entry = self.entries.pop(0)
-            worker.process(entry)
+            await worker.process(entry)
                 

@@ -6,15 +6,16 @@ class Worker:
     Consumes entries from the worklist and uses LLMs to answer it.
     """
 
-    def process(self, worklist_entry: WorklistEntry):
+    async def process(self, worklist_entry: WorklistEntry) -> None:
         """
-        Accepts a WorklistEntry and deposits the true value.
+        Asynchronously accepts a WorklistEntry and deposits the true value.
         """
         pass
 
-    def process_batch(self, worklist_entries: list[WorklistEntry]):
+
+    async def process_batch(self, worklist_entries: list[WorklistEntry]) -> None:
         """
-        Accepts a list of WorklistEntry and deposits the true values.
+        Asynchronously accepts a list of WorklistEntry and deposits the true values.
         """
         for entry in worklist_entries:
-            self.process(entry)
+            await self.process(entry)

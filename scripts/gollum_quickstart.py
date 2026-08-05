@@ -1,8 +1,8 @@
 import asyncio
 
-from gollum.client.singleton import acompletion
+from gollum.client.singleton import acompletion, completion
 
-async def main():
+async def amain():
     response = await acompletion(
         model="openai/gpt-5.6-luna",
         messages=[
@@ -12,5 +12,19 @@ async def main():
 
     print(response.choices[0].message.content)
 
+
+def main():
+    response = completion(
+        model="openai/gpt-5.6-luna",
+        messages=[
+            {"role": "user", "content": "What is the capital of France?"}
+        ],
+    )
+
+    print(response.choices[0].message.content)
+
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(amain())
+    # main()
