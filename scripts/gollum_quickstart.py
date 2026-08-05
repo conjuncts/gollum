@@ -1,5 +1,7 @@
 import asyncio
 
+from dotenv import load_dotenv
+
 from gollum.client.singleton import acompletion, completion
 
 async def amain():
@@ -26,5 +28,6 @@ def main():
 
 
 if __name__ == "__main__":
+    load_dotenv()
     asyncio.run(amain())
     # main()

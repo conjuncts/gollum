@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Dict, Iterable, List, Literal, Optional, Type,
 import httpx
 
 from gollum.types.chat_completions import AnthropicThinkingParam, ChatCompletionResponseModel, OpenAIWebSearchOptions
-from gollum.worklist.workers.mock_worker import MockWorker
+from gollum.worklist.workers.async_worker import AsyncOpenAIWorker
 from gollum.worklist.worklist import EagerWorklist
 
 if TYPE_CHECKING:
@@ -36,7 +36,10 @@ def get_singleton_client() -> GollumClient:
     global _singleton
     if _singleton is None:
         worklist = EagerWorklist()
-        worklist.enroll_worker(MockWorker(parroted_value="Hello, World!"))
+        # worklist.enroll_worker(MockWorker(parroted_value="Hello, World!"))
+
+        from openai import AsyncOpenAI
+        worklist.enroll_worker(AsyncOpenAIWorker(client=AsyncOpenAI()))
         _singleton = GollumClient(worklist)
     return _singleton
 

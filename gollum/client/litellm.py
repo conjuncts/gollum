@@ -21,7 +21,6 @@ class LiteLLMWorklistEntry:
         # wrap the gollum response in a SimpleNamespace
 
         async def wrap_response():
-            await self.worklist_entry.worklist.kickstart_work()
             response = await self.worklist_entry.wait()
             return _nested_simple_namespace(response.response)
 
