@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING, Dict, Iterable, List, Literal, Optional, Type,
 
 import httpx
 
-from gollum.provider.guess_provider import guess_provider_type
+from gollum.provider.guess_provider import guess_provider_name
 from gollum.types import GollumRequest
 from gollum.types.chat_completions import AnthropicThinkingParam, ChatCompletionRequest, OpenAIWebSearchOptions
 
@@ -85,6 +85,12 @@ def litellm_completion_to_request(
     Exact method signature, nearly identical to `completion` in litellm 1.95.0
     Compatible with `client.chat.completions.create` in openai 2.37.0
     """
+    # attempt to 
+    # TODO: model_list or model aliases
+    provider_name, model = guess_provider_name(model)
+    if provider_name is None:
+        raise ValueError(f"Unknown provider for {model}. Please specify a provider prefix (e.g. 'openai/', 'anthropic/', 'gemini/').")
+
     chat_completion: ChatCompletionRequest = {
         "messages": messages,
         "model": model,
@@ -129,27 +135,25 @@ def litellm_completion_to_request(
     optional = {k: v for k, v in optional.items() if v is not None}
     chat_completion.update(optional)
 
-    # attempt to 
-    # TODO: model_list or model aliases
-    provider_type = guess_provider_type(model)
-    if provider_type is None:
-        raise ValueError(f"Unknown provider for {model}. Please specify a provider prefix (e.g. 'openai/', 'anthropic/', 'gemini/').")
+    extras = {
+        "timeout": timeout,
+        "include_server_side_tool_invocations": include_server_side_tool_invocations,
+        "deployment_id": deployment_id,
+        "extra_headers": extra_headers,
+        "base_url": base_url,
+        "api_version": api_version,
+        "api_key": api_key,
+        "model_list": model_list,
+        "thinking": thinking,
+        "shared_session": shared_session,
+        "enable_json_schema_validation": enable_json_schema_validation,
+        **kwargs,
+    }
+    extras = {k: v for k, v in extras.items() if v is not None}
     gollum_request = GollumRequest(
-        request=chat_completion,
-        extras={
-            "timeout": timeout,
-            "include_server_side_tool_invocations": include_server_side_tool_invocations,
-            "deployment_id": deployment_id,
-            "extra_headers": extra_headers,
-            "base_url": base_url,
-            "api_version": api_version,
-            "api_key": api_key,
-            "model_list": model_list,
-            "thinking": thinking,
-            "shared_session": shared_session,
-            "enable_json_schema_validation": enable_json_schema_validation
-        },
+        chat_completion=chat_completion,
+        extras=extras,
         metadata={},
-        provider_type=provider_type,
+        provider_name=provider_name,
     )
     return gollum_request

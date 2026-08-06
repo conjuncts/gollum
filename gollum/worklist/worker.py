@@ -25,10 +25,3 @@ class Worker:
         Asynchronously checks if the provider can process the given WorklistEntry.
         """
         pass
-
-class Provider(Worker):
-    def supports(self, worklist_entry: WorklistEntry) -> bool:
-        """
-        Checks if the provider supports the given WorklistEntry.
-        """
-        pass

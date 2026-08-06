@@ -51,16 +51,16 @@ class PolarsPermacache(Permacache):
             # self.version = now
             addendum = pl.DataFrame({
                 "cache_key": [cache_key],
-                "chat_completion": [request.request],
+                "chat_completion": [request.chat_completion],
                 "extras": [json.dumps(request.extras)],
                 "metadata": [json.dumps(request.metadata)],
-                "provider_type": [request.provider_type],
+                "provider_name": [request.provider_name],
             }, schema_overrides={
                 "cache_key": pl.Utf8,
                 "chat_completion": ChatCompletionRequestSchema,
                 "extras": pl.Utf8,
                 "metadata": pl.Utf8,
-                "provider_type": pl.Utf8,
+                "provider_name": pl.Utf8,
             })
             df = pl.read_parquet(self._parquet_loc)
             combined = pl.concat([df, addendum], how="diagonal_relaxed")
@@ -76,10 +76,10 @@ class PolarsPermacache(Permacache):
             df = df.filter(
                 pl.col("cache_key") == cache_key
             )
-            completion, extras, metadata, provider_type = df.select(
-                "chat_completion", "extras", "metadata", "provider_type"
+            completion, extras, metadata, provider_name = df.select(
+                "chat_completion", "extras", "metadata", "provider_name"
             ).row(0, named=True)
-            return GollumRequest(completion, json.loads(extras), json.loads(metadata), provider_type)
+            return GollumRequest(completion, json.loads(extras), json.loads(metadata), provider_name)
 
 
 
