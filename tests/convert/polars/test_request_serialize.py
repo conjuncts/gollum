@@ -1,6 +1,6 @@
 import pytest
 
-from gollum.convert.polars.to_completion import completion_to_pl_serializable, pl_serializable_to_completion
+from gollum.convert.polars.serialize_request import pl_serialize_chat_request, pl_deserialize_chat_request
 from gollum.types.chat_completions import ChatCompletionRequest
 
 
@@ -8,8 +8,7 @@ from gollum.types.chat_completions import ChatCompletionRequest
 # Sample ChatCompletionRequests
 #
 # Each fixture exercises one or more OpenAI request shapes so the Polars
-# round-trip (completion_to_pl_serializable / pl_serializable_to_completion)
-# is covered across every polymorphic field:
+# round-trip is covered across every polymorphic field:
 #
 #   content: str | list[part]        tool_choice: str | dict
 #   voice: str | {"id": str}         function_call: str | dict
@@ -466,8 +465,8 @@ sample_requests: list[ChatCompletionRequest] = [
 @pytest.mark.parametrize("sample_index", range(len(sample_requests)))
 def test_sample(sample_index):
     orig = sample_requests[sample_index]
-    as_polars = completion_to_pl_serializable(orig)
-    as_original = pl_serializable_to_completion(as_polars)
+    as_polars = pl_serialize_chat_request(orig)
+    as_original = pl_deserialize_chat_request(as_polars)
     assert as_original == orig
 
 
@@ -475,6 +474,23 @@ def test_stop_not_round_trip():
     orig = {"model": "gpt-4o", "messages": [{"role": "user", "content": "Test"}], "stop": "5"}
     expected = orig.copy()
     expected["stop"] = ["5"]
-    as_polars = completion_to_pl_serializable(orig)
-    as_original = pl_serializable_to_completion(as_polars)
+    as_polars = pl_serialize_chat_request(orig)
+    as_original = pl_deserialize_chat_request(as_polars)
     assert as_original == expected
+
+@pytest.mark.parametrize("sample_index", range(len(sample_requests)))
+def test_sample_is_polars_serializable(sample_index):
+    import polars as pl
+    from gollum.types.pl_chat_completions import ChatCompletionRequestSchema
+    """Confirm the flattened dict actually loads into a Polars DataFrame
+    under ChatCompletionResponseSchema (i.e. the struct shapes genuinely
+    line up, not just that the Python round trip is lossless)."""
+    orig = sample_requests[sample_index]
+    as_polars = pl_serialize_chat_request(orig)
+    df = pl.DataFrame([as_polars], schema=ChatCompletionRequestSchema)
+    assert df.height == 1
+
+    # And back out through the DataFrame round trip too.
+    row = df.to_dicts()[0]
+    as_original = pl_deserialize_chat_request(row)
+    assert as_original == orig

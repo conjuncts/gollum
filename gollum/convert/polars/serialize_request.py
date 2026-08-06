@@ -349,11 +349,47 @@ def _web_search_options_from_flat(wso):
     return out or None
 
 
+# ---------- moderation: {model, policy: {input: {mode}, output: {mode}}} ----------
+# OpenAI shape:
+#   {"model": str, "policy": {"input": {"mode": "score"|"block"},
+#                               "output": {"mode": "score"|"block"}}}
+# Polars shape (ChatCompletionRequestSchema.moderation):
+#   {"model": str, "policy_input_mode": str, "policy_output_mode": str}
+
+
+def _moderation_to_flat(m):
+    if not m:
+        return None
+    policy = m.get("policy") or {}
+    policy_input = policy.get("input") or {}
+    policy_output = policy.get("output") or {}
+    return {
+        "model": m.get("model"),
+        "policy_input_mode": policy_input.get("mode"),
+        "policy_output_mode": policy_output.get("mode"),
+    }
+
+
+def _moderation_from_flat(m):
+    if not m:
+        return None
+    out = {}
+    _set_if_present(out, "model", m.get("model"))
+    policy = {}
+    if m.get("policy_input_mode") is not None:
+        policy["input"] = {"mode": m["policy_input_mode"]}
+    if m.get("policy_output_mode") is not None:
+        policy["output"] = {"mode": m["policy_output_mode"]}
+    if policy:
+        out["policy"] = policy
+    return out or None
+
+
 # ============================================================
 # Public round-trip API
 # ============================================================
 
-def completion_to_pl_serializable(data: ChatCompletionRequest) -> dict:
+def pl_serialize_chat_request(data: ChatCompletionRequest) -> dict:
     """
     Converts a ChatCompletionRequest to a dictionary that is serializable by Polars,
     i.e. one whose shape matches ChatCompletionRequestSchema exactly (every
@@ -387,7 +423,7 @@ def completion_to_pl_serializable(data: ChatCompletionRequest) -> dict:
         "max_tokens": data.get("max_tokens"),
         "metadata": _metadata_to_list(data.get("metadata")),
         "modalities": data.get("modalities"),
-        "moderation": data.get("moderation"),
+        "moderation": _moderation_to_flat(data.get("moderation")),
         "n": data.get("n"),
         "parallel_tool_calls": data.get("parallel_tool_calls"),
         "prediction": _prediction_to_flat(data.get("prediction")),
@@ -416,7 +452,7 @@ def completion_to_pl_serializable(data: ChatCompletionRequest) -> dict:
     }
 
 
-def pl_serializable_to_completion(data: dict) -> ChatCompletionRequest:
+def pl_deserialize_chat_request(data: dict) -> ChatCompletionRequest:
     """
     Converts a flattened dict (matching ChatCompletionRequestSchema, e.g. one row
     of `df_requests.to_dicts()`) back into an OpenAI-shaped ChatCompletionRequest
@@ -446,7 +482,7 @@ def pl_serializable_to_completion(data: dict) -> ChatCompletionRequest:
     _set_if_present(out, "max_tokens", data.get("max_tokens"))
     _set_if_present(out, "metadata", _metadata_from_list(data.get("metadata")))
     _set_if_present(out, "modalities", data.get("modalities"))
-    _set_if_present(out, "moderation", data.get("moderation"))
+    _set_if_present(out, "moderation", _moderation_from_flat(data.get("moderation")))
     _set_if_present(out, "n", data.get("n"))
     _set_if_present(out, "parallel_tool_calls", data.get("parallel_tool_calls"))
     _set_if_present(out, "prediction", _prediction_from_flat(data.get("prediction")))
