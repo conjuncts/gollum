@@ -1,4 +1,5 @@
 from litellm import completion
+# from litellm.router import Router
 
 response = completion(
     model="openai/gpt-5.6-luna",
@@ -8,3 +9,4 @@ response = completion(
 )
 
 print(response.choices[0].message.content)
+# router = Router()
