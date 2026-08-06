@@ -107,3 +107,6 @@ class ChatCompletionResponse(TypedDict):
     usage: NotRequired[Usage]
     system_fingerprint: NotRequired[str]
     service_tier: NotRequired[Optional[str]]
+
+    reasoning_content: NotRequired[str]
+    """While not part of the OpenAI spec, this field is often included (ie. by DeepSeek, OpenAI OSS, LiteLLM)"""

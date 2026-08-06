@@ -6,7 +6,8 @@ from gollum.client.singleton import acompletion, completion
 
 async def amain():
     response = await acompletion(
-        model="openai/gpt-5.6-luna",
+        # model="openai/gpt-5.6-luna",
+        model="anthropic/claude-haiku-4-5",
         messages=[
             {"role": "user", "content": "What is the capital of France?"}
         ],

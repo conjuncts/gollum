@@ -22,6 +22,13 @@ def _build_openai() -> Worker:
     client = AsyncOpenAI()
     return AsyncOpenAIWorker(client=client)
 
+def _build_anthropic() -> Worker:
+    from gollum.provider.anthropic import AsyncAnthropicWorker
+    from anthropic import AsyncAnthropic
+
+    client = AsyncAnthropic()
+    return AsyncAnthropicWorker(client=client)
+
 _default_registry = None
 def get_default_registry():
     global _default_registry
@@ -29,6 +36,7 @@ def get_default_registry():
         # build default registry
         _default_registry = ProviderRegistry()
         _default_registry.register_provider("openai", _build_openai)
+        _default_registry.register_provider("anthropic", _build_anthropic)
     return _default_registry
 
 def register_provider(provider_name: str, produces_provider: Callable[[], Worker]):

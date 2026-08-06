@@ -224,9 +224,7 @@ def _tool_choice_to_anthropic(tool_choice) -> AnthropicToolChoiceParam:
 def to_anthropic_request(
     request: ChatCompletionRequest,
     *,
-    thinking: Optional[AnthropicThinkingConfig] = None,
-    top_k: Optional[int] = None,
-    service_tier: Optional[Literal["standard", "priority"]] = None,
+    extras: dict
 ) -> AnthropicRequest:
     """
     Convert an OpenAI-style ChatCompletionRequest to the Anthropic Messages format.
@@ -240,15 +238,22 @@ def to_anthropic_request(
         NotImplementedError: for OpenAI features with no Anthropic equivalent
             (audio content parts, the legacy `function` role, non-function tools).
     """
+
+
+    thinking: Optional[AnthropicThinkingConfig] = extras.get("thinking")
+    top_k: Optional[int] = extras.get("top_k")
+    service_tier: Optional[Literal["standard", "priority"]] = extras.get("service_tier")
+
     messages = list(request.get("messages") or [])
 
     # max_tokens is required by the Anthropic API; accept either OpenAI spelling.
     max_tokens = request.get("max_completion_tokens") or request.get("max_tokens")
     if max_tokens is None:
-        raise ValueError(
-            "Anthropic requires 'max_tokens'; set 'max_completion_tokens' or "
-            "'max_tokens' on the request before converting."
-        )
+        # raise ValueError(
+        #     "Anthropic requires 'max_tokens'; set 'max_completion_tokens' or "
+        #     "'max_tokens' on the request before converting."
+        # )
+        max_tokens = 4096  # NOTE: also litellm's default, see https://docs.litellm.ai/docs/providers/anthropic
 
     system, messages = _extract_system(messages)
 
