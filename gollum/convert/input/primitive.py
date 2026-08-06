@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING, Union
 
-from gollum.convert.image import is_image
+from gollum.convert.image import is_image, to_completion_message
 from gollum.types.chat_completions import ChatCompletionMessage
 
 if TYPE_CHECKING:
@@ -13,11 +13,7 @@ def primitive_to_message(
     Convenience method that converts a primitive type (str, PIL.Image, list) to a user message
     """
     if is_image(primitive):
-        raise NotImplementedError
-        return {
-            "role": "user",
-            "content": primitive,
-        }
+        return to_completion_message(primitive)
     return {
         "role": "user",
         "content": primitive,
