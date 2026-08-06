@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Dict, Iterable, List, Literal, Optional, Type,
 import httpx
 
 from gollum.types.chat_completions import AnthropicThinkingParam, ChatCompletionResponseModel, OpenAIWebSearchOptions
-from gollum.worklist.workers.async_worker import AsyncOpenAIWorker
+from gollum.provider.openai import AsyncOpenAIWorker
 from gollum.worklist.worklist import EagerWorklist
 
 if TYPE_CHECKING:

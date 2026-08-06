@@ -127,6 +127,13 @@ def litellm_completion_to_request(
     }
     optional = {k: v for k, v in optional.items() if v is not None}
     chat_completion.update(optional)
+
+    # attempt to 
+    # TODO: model_list or model aliases
+    if "/" in model:
+        provider_type = model.split("/")[0]
+    else:
+        provider_type = None
     gollum_request = GollumRequest(
         request=chat_completion,
         extras={
@@ -143,5 +150,6 @@ def litellm_completion_to_request(
             "enable_json_schema_validation": enable_json_schema_validation
         },
         metadata={},
+        provider_type=provider_type,
     )
     return gollum_request

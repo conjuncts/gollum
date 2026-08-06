@@ -7,6 +7,7 @@ class GollumRequest:
         request: ChatCompletionRequest,
         extras: dict,
         metadata: dict,
+        provider_type: str,
     ):
         """
 
@@ -17,6 +18,7 @@ class GollumRequest:
         self.request = request
         self.extras = extras
         self.metadata = metadata
+        self.provider_type = provider_type
 
 class GollumResponse:
     def __init__(
