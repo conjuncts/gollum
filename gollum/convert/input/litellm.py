@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING, Dict, Iterable, List, Literal, Optional, Type,
 
 import httpx
 
+from gollum.provider.guess_provider import guess_provider_type
 from gollum.types import GollumRequest
 from gollum.types.chat_completions import AnthropicThinkingParam, ChatCompletionRequest, OpenAIWebSearchOptions
 
@@ -130,10 +131,9 @@ def litellm_completion_to_request(
 
     # attempt to 
     # TODO: model_list or model aliases
-    if "/" in model:
-        provider_type = model.split("/")[0]
-    else:
-        provider_type = None
+    provider_type = guess_provider_type(model)
+    if provider_type is None:
+        raise ValueError(f"Unknown provider for {model}. Please specify a provider prefix (e.g. 'openai/', 'anthropic/', 'gemini/').")
     gollum_request = GollumRequest(
         request=chat_completion,
         extras={

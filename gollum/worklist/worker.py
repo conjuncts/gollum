@@ -26,7 +26,7 @@ class Worker:
         """
         pass
 
-class Provider:
+class Provider(Worker):
     def supports(self, worklist_entry: WorklistEntry) -> bool:
         """
         Checks if the provider supports the given WorklistEntry.

@@ -6,13 +6,13 @@ from gollum.worklist.worker import Worker
 class AsyncPolymorphicWorker(Worker):
     def __init__(self, provider_registry: ProviderRegistry):
         self.registry = provider_registry
+        self.providers = []
 
     async def process(self, worklist_entry: WorklistEntry) -> None:
-        for provider in self.providers:
-            if provider.supports(worklist_entry):
-                await provider.process(worklist_entry)
-                return
-        raise ValueError("No provider supports this worklist entry")
+        provider = self.registry.get_provider(worklist_entry.request.provider_type)
+        if provider is None:
+            raise ValueError("No provider supports this worklist entry")
+        await provider.process(worklist_entry)
 
     def supports(self, worklist_entry: WorklistEntry) -> bool:
         return any(provider.supports(worklist_entry) for provider in self.providers)
