@@ -10,7 +10,7 @@ def test_minimal_request():
         "messages": [{"role": "user", "content": "Hi"}],
         "max_tokens": 100,
     }
-    assert to_anthropic_request(req) == {
+    assert to_anthropic_request(req, {}) == {
         "model": "claude-3-5-sonnet",
         "max_tokens": 100,
         "messages": [{"role": "user", "content": "Hi"}],
@@ -24,16 +24,15 @@ def test_max_completion_tokens_preferred_over_max_tokens():
         "max_completion_tokens": 200,
         "max_tokens": 50,
     }
-    assert to_anthropic_request(req)["max_tokens"] == 200
+    assert to_anthropic_request(req, {})["max_tokens"] == 200
 
 
-def test_missing_max_tokens_raises():
+def test_missing_max_tokens_default_4096():
     req: ChatCompletionRequest = {
         "model": "claude-3-5-sonnet",
         "messages": [{"role": "user", "content": "Hi"}],
     }
-    with pytest.raises(ValueError, match="max_tokens"):
-        to_anthropic_request(req)
+    assert to_anthropic_request(req, {})["max_tokens"] == 4096
 
 
 def test_system_message_hoisted_to_system_field():
@@ -45,7 +44,7 @@ def test_system_message_hoisted_to_system_field():
             {"role": "user", "content": "Hello"},
         ],
     }
-    out = to_anthropic_request(req)
+    out = to_anthropic_request(req, {})
     assert out["system"] == "Be brief."
     assert out["messages"] == [{"role": "user", "content": "Hello"}]
 
@@ -60,7 +59,7 @@ def test_multiple_system_messages_concatenated():
             {"role": "system", "content": "Answer in French."},
         ],
     }
-    out = to_anthropic_request(req)
+    out = to_anthropic_request(req, {})
     assert out["system"] == [
         {"type": "text", "text": "Be brief."},
         {"type": "text", "text": "Answer in French."},
@@ -75,7 +74,7 @@ def test_stop_normalized_to_list():
         "messages": [{"role": "user", "content": "x"}],
         "stop": "END",
     }
-    assert to_anthropic_request(req)["stop_sequences"] == ["END"]
+    assert to_anthropic_request(req, {})["stop_sequences"] == ["END"]
 
 
 def test_tools_and_tool_choice_converted():
@@ -98,7 +97,7 @@ def test_tools_and_tool_choice_converted():
         ],
         "tool_choice": {"type": "function", "function": {"name": "get_weather"}},
     }
-    out = to_anthropic_request(req)
+    out = to_anthropic_request(req, {})
     assert out["tools"] == [
         {
             "name": "get_weather",
@@ -117,7 +116,7 @@ def test_tool_choice_strings():
         "messages": [{"role": "user", "content": "x"}],
         "tool_choice": "required",
     }
-    assert to_anthropic_request(req)["tool_choice"] == {"type": "any"}
+    assert to_anthropic_request(req, {})["tool_choice"] == {"type": "any"}
 
 
 def test_tool_calls_and_results_converted():
@@ -142,7 +141,7 @@ def test_tool_calls_and_results_converted():
             {"role": "tool", "tool_call_id": "call_1", "content": '{"temp": 72}'},
         ],
     }
-    out = to_anthropic_request(req)
+    out = to_anthropic_request(req, {})
     assert out["messages"] == [
         {
             "role": "assistant",
@@ -181,7 +180,7 @@ def test_image_data_uri_converted():
             }
         ],
     }
-    out = to_anthropic_request(req)
+    out = to_anthropic_request(req, {})
     assert out["messages"][0]["content"] == [
         {"type": "text", "text": "What is this?"},
         {
@@ -207,7 +206,7 @@ def test_image_plain_url_converted():
             }
         ],
     }
-    out = to_anthropic_request(req)
+    out = to_anthropic_request(req, {})
     assert out["messages"][0]["content"] == [
         {
             "type": "image",
@@ -224,7 +223,7 @@ def test_metadata_user_id_mapped_and_extra_keys_dropped():
         "user": "u_123",
         "metadata": {"user_id": "u_456", "session": "s1"},
     }
-    out = to_anthropic_request(req)
+    out = to_anthropic_request(req, {})
     assert out["metadata"] == {"user_id": "u_456"}
 
 
@@ -236,8 +235,10 @@ def test_thinking_and_top_k_forwarded():
     }
     out = to_anthropic_request(
         req,
-        thinking={"type": "enabled", "budget_tokens": 2048},
-        top_k=40,
+        extras={
+            "thinking": {"type": "enabled", "budget_tokens": 2048},
+            "top_k": 40,
+        }
     )
     assert out["thinking"] == {"type": "enabled", "budget_tokens": 2048}
     assert out["top_k"] == 40
@@ -252,4 +253,4 @@ def test_audio_part_raises_not_implemented():
         ],
     }
     with pytest.raises(NotImplementedError, match="input_audio"):
-        to_anthropic_request(req)
+        to_anthropic_request(req, {})

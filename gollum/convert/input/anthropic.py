@@ -223,7 +223,6 @@ def _tool_choice_to_anthropic(tool_choice) -> AnthropicToolChoiceParam:
 
 def to_anthropic_request(
     request: ChatCompletionRequest,
-    *,
     extras: dict
 ) -> AnthropicRequest:
     """

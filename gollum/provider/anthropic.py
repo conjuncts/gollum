@@ -12,8 +12,11 @@ if TYPE_CHECKING:
 
 
 class AsyncAnthropicWorker(Worker):
-    def __init__(self, client: "AsyncAnthropic"):
+    def __init__(self, client: "AsyncAnthropic", *, store_original=True):
         self.client = client
+        self.store_original = store_original
+        """Set to false to save some space"""
+
 
     async def process(self, worklist_entry: WorklistEntry) -> None:
         compl = worklist_entry.request.chat_completion
@@ -21,4 +24,6 @@ class AsyncAnthropicWorker(Worker):
         as_anthropic_request = to_anthropic_request(compl, extras=worklist_entry.request.extras)
         result: "Message" = await self.client.messages.create(**as_anthropic_request)
         resp = anthropic_message_to_completion(result.model_dump())
+        if self.store_original:
+            resp.original = result.model_dump_json()
         worklist_entry.finish(resp)

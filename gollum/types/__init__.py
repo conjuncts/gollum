@@ -1,3 +1,5 @@
+from typing import Optional
+
 from gollum.types.chat_completions import ChatCompletionRequest, ChatCompletionResponse
 
 
@@ -26,7 +28,10 @@ class GollumResponse:
         response: ChatCompletionResponse,
         extras: dict,
         metadata: dict,
+        original: Optional[str] = None,
     ):
         self.response = response
         self.extras = extras
         self.metadata = metadata
+        self.original = original
+        """Whatever the provider returned as original response (BaseModel.model_dump_json()) - helps make sure that """

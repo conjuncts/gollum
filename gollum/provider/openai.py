@@ -22,5 +22,4 @@ class AsyncOpenAIWorker(Worker):
             compl["model"] = compl["model"].removeprefix("openai/")
         result: ChatCompletionResponseModel = await self.client.chat.completions.create(**compl)
         as_dict = result.model_dump()
-        worklist_entry.finish(GollumResponse(as_dict, extras={}, metadata={}))
-
+        worklist_entry.finish(GollumResponse(as_dict, extras={}, metadata={}, original=None))
