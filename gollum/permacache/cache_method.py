@@ -1,3 +1,6 @@
+import hashlib
+import json
+
 from gollum.types import GollumRequest
 
 
@@ -10,4 +13,7 @@ class CacheMethod:
         self,
         request: GollumRequest
     ):
-        pass
+        # simple implementation: hash the json-dumped request, plus a salt
+        json_str = json.dumps(request.request)
+        salt_str = request.metadata.get("gollum.salt", "")
+        return hashlib.sha256((json_str + salt_str).encode()).hexdigest()

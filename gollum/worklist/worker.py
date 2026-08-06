@@ -19,3 +19,16 @@ class Worker:
         """
         for entry in worklist_entries:
             await self.process(entry)
+
+    async def can_process(self, worklist_entry: WorklistEntry) -> bool:
+        """
+        Asynchronously checks if the provider can process the given WorklistEntry.
+        """
+        pass
+
+class Provider:
+    def supports(self, worklist_entry: WorklistEntry) -> bool:
+        """
+        Checks if the provider supports the given WorklistEntry.
+        """
+        pass

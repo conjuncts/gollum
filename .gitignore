@@ -12,3 +12,4 @@ wheels/
 experiments
 .vscode
 .coverage
+.env
