@@ -1,5 +1,4 @@
-
-from PIL.GimpGradientFile import TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from gollum.types import GollumRequest
 from gollum.worklist.base import WorklistEntry
