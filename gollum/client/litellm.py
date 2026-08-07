@@ -3,28 +3,56 @@ from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Literal, Optional, 
 
 import httpx
 from aiohttp import ClientSession
-from litellm import AlertingConfig, AllowedFailsPolicy, AssistantsTypedDict, DeploymentTypedDict, GuardrailTypedDict, OptionalPreCallChecks, RetryPolicy, RouterGeneralSettings, RouterModelGroupAliasItem, RoutingGroup, RoutingPlugin, SearchToolTypedDict
-from openai.types.chat import ChatCompletionAudioParam, ChatCompletionPredictionContentParam
-from openai.types.chat.completion_create_params import Moderation, PromptCacheOptions
-from pydantic import BaseModel
 
 from gollum.client.base import GollumClient
-
-from litellm.types.utils import GenericBudgetConfigType
-
 from gollum.client.litellm_helper import LiteLLMWorklistEntry
-from gollum.client.singleton import get_singleton_client
 from gollum.convert.input.litellm import litellm_completion_to_request
+from gollum.folder.file_manager import FileManager
+from gollum.permacache.cache_method import CacheMethod
+from gollum.permacache.pl_permacache import PolarsPermacache
+from gollum.provider.provider_registry import get_default_registry
 from gollum.types.chat_completions import AnthropicThinkingParam, ChatCompletionResponseModel, OpenAIWebSearchOptions
+from gollum.worklist.workers.permacache_worker import PermacacheWorker
+from gollum.worklist.workers.polymorphic_worker import AsyncPolymorphicWorker
+from gollum.worklist.worklist import EagerWorklist
 
 
 if TYPE_CHECKING:
     from openai.types.chat import (
         ChatCompletionMessageParam,
         ChatCompletionModality,
+        ChatCompletionAudioParam,
+        ChatCompletionPredictionContentParam,
     )
+    from openai.types.chat.completion_create_params import Moderation, PromptCacheOptions
+    from litellm import AlertingConfig, AllowedFailsPolicy, AssistantsTypedDict, DeploymentTypedDict, GuardrailTypedDict, OptionalPreCallChecks, RetryPolicy, RouterGeneralSettings, RouterModelGroupAliasItem, RoutingGroup, RoutingPlugin, SearchToolTypedDict
+    from litellm.types.utils import GenericBudgetConfigType
+    from pydantic import BaseModel
 
 
+def _create_gollum_client(storage=False) -> GollumClient:
+    worklist = EagerWorklist()
+
+    # worker = MockWorker(parroted_value="Hello, World!")
+
+    # from openai import AsyncOpenAI
+    # worker = AsyncOpenAIWorker(client=AsyncOpenAI())
+    if storage:
+        permacache = PolarsPermacache(FileManager(".gollum"), flush_threshold=10)
+        cache_method = CacheMethod()
+        cacher = PermacacheWorker(permacache, cache_method)
+        worklist.enroll_cache_worker(cacher)
+
+    worker = AsyncPolymorphicWorker(provider_registry=get_default_registry())
+    worklist.enroll_worker(worker)
+    return GollumClient(worklist)
+
+_singleton = None
+def _get_singleton_client() -> GollumClient:
+    global _singleton
+    if _singleton is None:
+        _singleton = _create_gollum_client()
+    return _singleton
 
 
 async def acompletion(
@@ -92,7 +120,7 @@ async def acompletion(
     1-to-1 to litellm's acompletion
     """
     if gollum_client is None:
-        gollum_client = get_singleton_client()
+        gollum_client = _get_singleton_client()
     request = litellm_completion_to_request(
         model=model,
         messages=messages,
@@ -344,7 +372,7 @@ class GollumRouter:
         client: Optional[GollumClient] = None,
     ) -> None:
         if client is None:
-            client = get_singleton_client()
+            client = _create_gollum_client(storage=cache_responses)
         self.client = client
 
     @wraps(acompletion)

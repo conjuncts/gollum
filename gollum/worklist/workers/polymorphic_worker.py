@@ -8,11 +8,11 @@ class AsyncPolymorphicWorker(Worker):
         self.registry = provider_registry
         self.providers = []
 
-    async def process(self, worklist_entry: WorklistEntry) -> None:
+    async def process(self, worklist_entry: WorklistEntry) -> bool:
         provider = self.registry.get_provider(worklist_entry.request.provider_name)
         if provider is None:
             raise ValueError("No provider supports this worklist entry")
-        await provider.process(worklist_entry)
+        return await provider.process(worklist_entry)
 
     def supports(self, worklist_entry: WorklistEntry) -> bool:
         return any(provider.supports(worklist_entry) for provider in self.providers)

@@ -14,7 +14,7 @@ class AsyncOpenAIWorker(Worker):
     def __init__(self, client: "AsyncOpenAI"):
         self.client = client
 
-    async def process(self, worklist_entry: WorklistEntry) -> None:
+    async def process(self, worklist_entry: WorklistEntry) -> bool:
         compl = worklist_entry.request.chat_completion
         # drop any that are None. (model and messages are required)
         compl = {k: v for k, v in compl.items() if k in ["model", "messages"] or v is not None}
@@ -23,3 +23,4 @@ class AsyncOpenAIWorker(Worker):
         result: ChatCompletionResponseModel = await self.client.chat.completions.create(**compl)
         as_dict = result.model_dump()
         worklist_entry.finish(GollumResponse(as_dict, extras={}, metadata={}, original=None))
+        return True

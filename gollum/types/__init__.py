@@ -30,7 +30,7 @@ class GollumResponse:
         metadata: dict,
         original: Optional[str] = None,
     ):
-        self.response = response
+        self.chat_completion = response
         self.extras = extras
         self.metadata = metadata
         self.original = original

@@ -18,7 +18,7 @@ class AsyncAnthropicWorker(Worker):
         """Set to false to save some space"""
 
 
-    async def process(self, worklist_entry: WorklistEntry) -> None:
+    async def process(self, worklist_entry: WorklistEntry) -> bool:
         compl = worklist_entry.request.chat_completion
         # drop any that are None. (model and messages are required)
         as_anthropic_request = to_anthropic_request(compl, extras=worklist_entry.request.extras)
@@ -27,3 +27,4 @@ class AsyncAnthropicWorker(Worker):
         if self.store_original:
             resp.original = result.model_dump_json()
         worklist_entry.finish(resp)
+        return True

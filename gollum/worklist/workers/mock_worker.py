@@ -12,5 +12,6 @@ class MockWorker(Worker):
     def __init__(self, parroted_value: str):
         self.parroted_value = parroted_value
 
-    async def process(self, worklist_entry: WorklistEntry):
+    async def process(self, worklist_entry: WorklistEntry) -> bool:
         worklist_entry.finish(GollumResponse(primitive_to_completion(self.parroted_value), {}, {}))
+        return True

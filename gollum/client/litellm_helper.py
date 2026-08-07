@@ -22,6 +22,6 @@ class LiteLLMWorklistEntry:
 
         async def wrap_response():
             response = await self.worklist_entry.wait()
-            return _nested_simple_namespace(response.response)
+            return _nested_simple_namespace(response.chat_completion)
 
         return wrap_response().__await__()

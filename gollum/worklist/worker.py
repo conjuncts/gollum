@@ -6,9 +6,10 @@ class Worker:
     Consumes entries from the worklist and uses LLMs to answer it.
     """
 
-    async def process(self, worklist_entry: WorklistEntry) -> None:
+    async def process(self, worklist_entry: WorklistEntry) -> bool:
         """
         Asynchronously accepts a WorklistEntry and deposits the true value.
+        Returns: True if the entry was processed successfully, False otherwise.
         """
         pass
 

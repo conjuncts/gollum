@@ -2,13 +2,14 @@ from typing import Optional
 
 from gollum.folder.file_manager import FileManager
 from gollum.permacache.base import Permacache
-from gollum.types import GollumRequest
-from gollum.types.pl_chat_completions import ChatCompletionRequestSchema
+from gollum.types import GollumResponse
+from gollum.types.pl_chat_completions import ChatCompletionResponseSchema
 
 
 import polars as pl
 
 
+import atexit
 import json
 import threading
 from pathlib import Path
@@ -49,13 +50,18 @@ class PolarsPermacache(Permacache):
         self._flush_threshold = flush_threshold
         self._lock = threading.RLock()
 
-        # cache_key -> latest GollumRequest; authoritative for all reads.
-        self._cache: dict[str, GollumRequest] = {}
+        # cache_key -> latest GollumResponse; authoritative for all reads.
+        self._cache: dict[str, GollumResponse] = {}
         # Buckets whose parquet files have already been loaded into _cache.
         self._loaded_shards: set[int] = set()
         # Pending rows (dicts) awaiting flush, keyed by bucket.
         self._pending: dict[int, list[dict]] = {}
         self._pending_count = 0
+
+        # Persist any rows still buffered in memory when the process exits
+        # (e.g. an interpreter exit before an explicit flush() is called).
+        atexit.register(self._flush_at_exit)
+
 
     # ---------- paths / bucketing ----------
 
@@ -73,29 +79,36 @@ class PolarsPermacache(Permacache):
 
     # ---------- public API ----------
 
-    def store(self, request: GollumRequest, cache_key: str, likely_partition: str):
+    async def store(self, response: GollumResponse, cache_key: str, likely_partition: str):
         with self._lock:
-            self._cache[cache_key] = request
+            self._cache[cache_key] = response
             self._pending.setdefault(self._bucket(cache_key), []).append({
                 "cache_key": cache_key,
-                "chat_completion": request.chat_completion,
-                "extras": json.dumps(request.extras),
-                "metadata": json.dumps(request.metadata),
-                "provider_name": request.provider_name,
+                "chat_completion": response.chat_completion,
+                "extras": json.dumps(response.extras),
+                "metadata": json.dumps(response.metadata),
+                # "provider_name": response.provider_name,
+                # "original": response.original,
+                "original": None,
             })
             self._pending_count += 1
             if self._pending_count >= self._flush_threshold:
                 self._flush()
 
-    def retrieve(self, cache_key: str, likely_partition: str) -> Optional[GollumRequest]:
+    async def retrieve(self, cache_key: str, likely_partition: str) -> Optional[GollumResponse]:
         with self._lock:
             if cache_key in self._cache:
                 return self._cache[cache_key]
             self._load_shard(self._bucket(cache_key))
             return self._cache.get(cache_key)
 
-    def flush(self):
+    async def flush(self):
         """Force any buffered stores out to disk."""
+        with self._lock:
+            self._flush()
+
+    def _flush_at_exit(self):
+        """atexit hook: persist pending rows so buffered stores are never lost."""
         with self._lock:
             self._flush()
 
@@ -108,10 +121,11 @@ class PolarsPermacache(Permacache):
         for bucket, rows in self._pending.items():
             addendum = pl.DataFrame(rows, schema_overrides={
                 "cache_key": pl.Utf8,
-                "chat_completion": pl.Struct(ChatCompletionRequestSchema),
+                "chat_completion": pl.Struct(ChatCompletionResponseSchema),
                 "extras": pl.Utf8,
                 "metadata": pl.Utf8,
-                "provider_name": pl.Utf8,
+                "original": pl.Utf8,
+                # "provider_name": pl.Utf8,
             })
             path = self._shard_path(bucket)
             if path.exists():
@@ -135,10 +149,11 @@ class PolarsPermacache(Permacache):
                 # _cache is authoritative: it may hold a newer pending value
                 # for a key whose older version is still in the file.
                 if row["cache_key"] not in self._cache:
-                    self._cache[row["cache_key"]] = GollumRequest(
+                    self._cache[row["cache_key"]] = GollumResponse(
                         row["chat_completion"],
                         json.loads(row["extras"]),
                         json.loads(row["metadata"]),
-                        row["provider_name"],
+                        # row["provider_name"],
+                        original=row["original"],
                     )
         self._loaded_shards.add(bucket)

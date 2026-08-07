@@ -1,4 +1,6 @@
 
+from PIL.GimpGradientFile import TYPE_CHECKING
+
 from gollum.types import GollumRequest
 from gollum.worklist.base import WorklistEntry
 
@@ -6,6 +8,9 @@ from gollum.worklist.base import WorklistEntry
 import asyncio
 
 from gollum.worklist.worker import Worker
+
+if TYPE_CHECKING:
+    from gollum.worklist.workers.permacache_worker import PermacacheWorker
 
 
 class Worklist:
@@ -16,6 +21,7 @@ class Worklist:
     def __init__(self):
         self.entries = []
         self.workers: list[Worker] = []
+        self.cache_worker = None
 
     async def enroll(self, request: GollumRequest) -> WorklistEntry:
         """
@@ -38,6 +44,14 @@ class Worklist:
     def enroll_worker(self, worker: Worker):
         self.workers.append(worker)
 
+    def enroll_cache_worker(self, worker: "PermacacheWorker"):
+        """
+        
+        """
+        self.workers.append(worker)
+        self.cache_worker = worker
+
+
     async def kickstart_work(self):
         """
         Start processing the entries
@@ -54,8 +68,22 @@ class EagerWorklist(Worklist):
         # simply use the first worker
         if not self.workers:
             raise ValueError("No workers available to process entries.")
-        worker = self.workers[0]
+
         while self.entries:
             entry = self.entries.pop(0)
-            await worker.process(entry)
-                
+
+            # cache hit
+            if self.cache_worker is not None:
+                if await self.cache_worker.process(entry):
+                    continue
+
+            # live processing
+            for worker in self.workers:
+                if await worker.process(entry):
+                    break
+            else:
+                raise ValueError("No worker could process this entry:", entry)
+
+            # record value
+            if self.cache_worker is not None:
+                await self.cache_worker.record(entry)

@@ -13,3 +13,4 @@ experiments
 .vscode
 .coverage
 .env
+.gollum

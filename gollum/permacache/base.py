@@ -2,7 +2,7 @@ from typing import Optional
 
 
 from gollum.folder.file_manager import FileManager
-from gollum.types import GollumRequest
+from gollum.types import GollumResponse
 
 
 class Permacache:
@@ -12,8 +12,8 @@ class Permacache:
     def __init__(self, fm: FileManager):
         self.fm = fm
 
-    def store(self, request: GollumRequest, cache_key: str, likely_partition: str):
+    async def store(self, response: GollumResponse, cache_key: str, likely_partition: str):
         pass
 
-    def retrieve(self, cache_key: str, likely_partition: str) -> Optional[GollumRequest]:
+    async def retrieve(self, cache_key: str, likely_partition: str) -> Optional[GollumResponse]:
         pass

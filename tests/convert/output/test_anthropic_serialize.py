@@ -55,7 +55,7 @@ def test_anthropic_message_to_completion_ground_truth():
     result = anthropic_message_to_completion(payload)
 
     actual = {
-        "response": result.response,
+        "response": result.chat_completion,
         "extras": result.extras,
         "metadata": result.metadata,
     }

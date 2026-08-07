@@ -6,7 +6,8 @@ from gollum.client.litellm import GollumRouter
 
 async def amain():
     # response = await acompletion(
-    router = GollumRouter()
+    # router = GollumRouter()
+    router = GollumRouter(cache_responses=True)
     response = await router.acompletion(
         model="openai/gpt-5.6-luna",
         # model="anthropic/claude-haiku-4-5",
