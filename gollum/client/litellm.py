@@ -9,7 +9,7 @@ from gollum.client.litellm_helper import LiteLLMWorklistEntry
 from gollum.convert.input.litellm import litellm_completion_to_request
 from gollum.folder.file_manager import FileManager
 from gollum.permacache.cache_method import CacheMethod
-from gollum.permacache.pl_permacache import PolarsPermacache
+from gollum.permacache.duckdb_permacache import DuckDBPermacache
 from gollum.provider.provider_registry import get_default_registry
 from gollum.types.chat_completions import AnthropicThinkingParam, ChatCompletionResponseModel, OpenAIWebSearchOptions
 from gollum.worklist.workers.permacache_worker import PermacacheWorker
@@ -38,7 +38,8 @@ def _create_gollum_client(storage=False) -> GollumClient:
     # from openai import AsyncOpenAI
     # worker = AsyncOpenAIWorker(client=AsyncOpenAI())
     if storage:
-        permacache = PolarsPermacache(FileManager(".gollum"), flush_threshold=10)
+        # permacache = PolarsPermacache(FileManager(".gollum"), flush_threshold=10)
+        permacache = DuckDBPermacache(FileManager(".gollum"), flush_threshold=10)
         cache_method = CacheMethod()
         cacher = PermacacheWorker(permacache, cache_method)
         worklist.enroll_cache_worker(cacher)

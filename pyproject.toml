@@ -18,3 +18,8 @@ dev = [
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",
 ]
+duckdb = [
+    "duckdb>=1.5.5",
+    "pyarrow>=25.0.0",
+]
+
