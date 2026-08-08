@@ -12,9 +12,9 @@ from gollum.permacache.cache_method import CacheMethod
 from gollum.permacache.duckdb_permacache import DuckDBPermacache
 from gollum.provider.provider_registry import get_default_registry
 from gollum.types.chat_completions import AnthropicThinkingParam, ChatCompletionResponseModel, OpenAIWebSearchOptions
+from gollum.worklist.concurrent_worklist import ConcurrentWorklist
 from gollum.worklist.workers.permacache_worker import PermacacheWorker
 from gollum.worklist.workers.polymorphic_worker import AsyncPolymorphicWorker
-from gollum.worklist.worklist import EagerWorklist
 
 
 if TYPE_CHECKING:
@@ -31,7 +31,8 @@ if TYPE_CHECKING:
 
 
 def _create_gollum_client(storage=False) -> GollumClient:
-    worklist = EagerWorklist()
+    # worklist = EagerWorklist()
+    worklist = ConcurrentWorklist()
 
     # worker = MockWorker(parroted_value="Hello, World!")
 
@@ -114,6 +115,7 @@ async def acompletion(
     prompt_cache_options: Optional["PromptCacheOptions"] = None,
     prompt_cache_retention: Optional[Literal["in_memory", "24h"]] = None,
     # store: Optional[bool] = None, # soon to be deprecated: related to openai's fine tuning api
+    gollum_salt: Optional[str] = None,
     gollum_client: Optional[GollumClient],
     **kwargs,
 ) -> ChatCompletionResponseModel:
@@ -170,6 +172,7 @@ async def acompletion(
         prompt_cache_key=prompt_cache_key,
         prompt_cache_options=prompt_cache_options,
         prompt_cache_retention=prompt_cache_retention,
+        gollum_salt=gollum_salt,
         **kwargs,
     )
     worklist_entry = await gollum_client.worklist.enroll(request)
@@ -233,6 +236,7 @@ def completion(
     prompt_cache_key: Optional[str] = None,
     prompt_cache_options: Optional["PromptCacheOptions"] = None,
     prompt_cache_retention: Optional[Literal["in_memory", "24h"]] = None,
+    gollum_salt: Optional[str] = None,
     # store: Optional[bool] = None, # soon to be deprecated: related to openai's fine tuning api
     gollum_client: Optional[GollumClient],
     **kwargs,
@@ -288,6 +292,7 @@ def completion(
         prompt_cache_key=prompt_cache_key,
         prompt_cache_options=prompt_cache_options,
         prompt_cache_retention=prompt_cache_retention,
+        gollum_salt=gollum_salt,
         gollum_client=gollum_client,
         **kwargs,
     )

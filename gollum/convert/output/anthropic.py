@@ -159,7 +159,7 @@ def anthropic_message_to_completion(anthropic_message: dict) -> GollumResponse:
         "choices": [choice],
     }
 
-    anthropic_usage = dict(anthropic_message.pop("usage") or {})
+    anthropic_usage = dict(anthropic_message.pop("usage", None) or {})
     usage = _build_usage(anthropic_usage)
     if usage is not None:
         response["usage"] = usage

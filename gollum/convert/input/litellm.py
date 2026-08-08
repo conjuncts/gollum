@@ -79,6 +79,7 @@ def litellm_completion_to_request(
     prompt_cache_options: Optional["PromptCacheOptions"] = None,
     prompt_cache_retention: Optional[Literal["in_memory", "24h"]] = None,
     # store: Optional[bool] = None, # soon to be deprecated: related to openai's fine tuning api
+    gollum_salt: Optional[str] = None,
     **kwargs,
 ) -> GollumRequest:
     """
@@ -150,10 +151,13 @@ def litellm_completion_to_request(
         **kwargs,
     }
     extras = {k: v for k, v in extras.items() if v is not None}
+    metadata = {}
+    if gollum_salt is not None:
+        metadata["gollum_salt"] = gollum_salt
     gollum_request = GollumRequest(
         chat_completion=chat_completion,
         extras=extras,
-        metadata={},
+        metadata=metadata,
         provider_name=provider_name,
     )
     return gollum_request

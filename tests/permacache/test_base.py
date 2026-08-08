@@ -30,7 +30,7 @@ def _resp(content: str = "hi") -> GollumResponse:
             "usage": {"prompt_tokens": 5, "completion_tokens": 5, "total_tokens": 10},
         },
         extras={"temperature": 0.7},
-        metadata={"gollum.salt": "test"},
+        metadata={"gollum_salt": "test"},
     )
 
 @pytest.mark.asyncio

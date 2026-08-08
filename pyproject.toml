@@ -23,3 +23,11 @@ duckdb = [
     "pyarrow>=25.0.0",
 ]
 
+
+[tool.coverage.report]
+exclude_also = [
+"@(abc\\.)?abstractmethod",
+]
+
+[tool.coverage.run]
+omit = ["tests/*"]
