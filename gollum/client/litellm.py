@@ -387,7 +387,7 @@ class GollumRouter:
 
     @wraps(completion)
     def completion(self, *args, **kwargs):
-        return completion(self.client, *args, **kwargs)
+        return completion(*args, gollum_client=self.client, **kwargs)
 
     completion.__name__ = "completion"
     completion.__doc__ = (

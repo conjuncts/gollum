@@ -1,3 +1,4 @@
+from abc import abstractmethod
 from typing import TYPE_CHECKING
 
 from gollum.types import GollumRequest
@@ -18,7 +19,6 @@ class Worklist:
     """
 
     def __init__(self):
-        self.entries = []
         self.workers: list[Worker] = []
         self.cache_worker = None
 
@@ -29,8 +29,7 @@ class Worklist:
         :return:
         """
         entry = WorklistEntry(request, self)
-        self.entries.append(entry)
-        await self.kickstart_work()
+        await self.kickstart_work(entry)
         return entry
 
     # A llm provider should pop an entry, process it, attach the payload, and then mark it as done.
@@ -45,13 +44,14 @@ class Worklist:
 
     def enroll_cache_worker(self, worker: "PermacacheWorker"):
         """
-        
+        Enroll a permacache worker to handle caching operations.
         """
         self.workers.append(worker)
         self.cache_worker = worker
 
 
-    async def kickstart_work(self):
+    @abstractmethod
+    async def kickstart_work(self, entry: WorklistEntry):
         """
         Start processing the entries
         """
@@ -63,26 +63,23 @@ class EagerWorklist(Worklist):
     Simple, no-concurrency worklist where immediately processes entries.
     """
 
-    async def kickstart_work(self):
+    async def kickstart_work(self, entry: WorklistEntry):
         # simply use the first worker
         if not self.workers:
             raise ValueError("No workers available to process entries.")
 
-        while self.entries:
-            entry = self.entries.pop(0)
+        # cache hit
+        if self.cache_worker is not None:
+            if await self.cache_worker.process(entry):
+                return
 
-            # cache hit
-            if self.cache_worker is not None:
-                if await self.cache_worker.process(entry):
-                    continue
+        # live processing
+        for worker in self.workers:
+            if await worker.process(entry):
+                break
+        else:
+            raise ValueError("No worker could process this entry:", entry)
 
-            # live processing
-            for worker in self.workers:
-                if await worker.process(entry):
-                    break
-            else:
-                raise ValueError("No worker could process this entry:", entry)
-
-            # record value
-            if self.cache_worker is not None:
-                await self.cache_worker.record(entry)
+        # record value
+        if self.cache_worker is not None:
+            await self.cache_worker.record(entry)

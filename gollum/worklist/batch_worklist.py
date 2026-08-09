@@ -252,13 +252,21 @@ class BatchWorklist(Worklist):
         self._flush_lock = asyncio.Lock()
         self._pending_tasks: set[asyncio.Task] = set()
         self.trigger.attach(self)
+        self.entries: list[WorklistEntry] = []
 
-    async def kickstart_work(self):
+
+    async def kickstart_work(self, entry: WorklistEntry):
         """
         Unlike Eager/Concurrent, this does NOT process entries itself.
         It just tells the trigger something new arrived and lets the
         trigger's policy decide what, if anything, happens next.
         """
+        # eagerly use cache worker
+        if self.cache_worker is not None:
+            if await self.cache_worker.process(entry):
+                return
+
+        self.entries.append(entry)
         if self.entries:
             self.trigger.on_enroll(self.entries[-1])
 
@@ -299,14 +307,7 @@ class BatchWorklist(Worklist):
         if not self.workers:
             raise ValueError("No workers available to process entries.")
 
-        # Cache pass: pull out anything servable straight from cache.
         remaining = batch
-        if self.cache_worker is not None:
-            remaining = []
-            for entry in batch:
-                if not await self.cache_worker.process(entry):
-                    remaining.append(entry)
-
         if not remaining:
             return
 

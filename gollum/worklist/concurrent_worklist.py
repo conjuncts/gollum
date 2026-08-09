@@ -28,7 +28,7 @@ class ConcurrentWorklist(Worklist):
         self._cache_lock = asyncio.Lock()
         self._pending_tasks: set[asyncio.Task] = set()
 
-    async def kickstart_work(self):
+    async def kickstart_work(self, entry: WorklistEntry):
         """
         Drain any newly-enrolled entries into tasks and return immediately --
         do NOT await the tasks here. Awaiting would make enroll() block until
@@ -43,11 +43,9 @@ class ConcurrentWorklist(Worklist):
         if not self.workers:
             raise ValueError("No workers available to process entries.")
 
-        while self.entries:
-            entry = self.entries.pop(0)
-            task = asyncio.create_task(self._process_entry(entry))
-            self._pending_tasks.add(task)
-            task.add_done_callback(self._pending_tasks.discard)
+        task = asyncio.create_task(self._process_entry(entry))
+        self._pending_tasks.add(task)
+        task.add_done_callback(self._pending_tasks.discard)
 
     async def _process_entry(self, entry: WorklistEntry):
         if self._semaphore is not None:
