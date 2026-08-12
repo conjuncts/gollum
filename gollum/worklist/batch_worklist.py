@@ -3,9 +3,11 @@ from __future__ import annotations
 import abc
 import asyncio
 import atexit
-from typing import Optional
+from typing import List, Optional, Tuple
 
+from gollum.batch.job import BatchJob
 from gollum.worklist.base import WorklistEntry
+from gollum.worklist.worker import Worker
 from gollum.worklist.worklist import Worklist
 
 
@@ -315,15 +317,20 @@ class BatchWorklist(Worklist):
         # handle each entry (mirrors EagerWorklist's "first capable
         # worker wins" fallback, generalized so a single flush can be
         # serviced by more than one worker if the batch is heterogeneous).
+        jobs: List[Tuple[Worker, BatchJob]] = []
         for worker in self.workers:
             if not remaining:
                 break
             capable = [e for e in remaining if await worker.can_process(e)]
             if not capable:
                 continue
-            await worker.process_batch(capable)
+            job = await worker.send_batch(capable)
+            jobs.append((worker, job))
             capable_set = set(id(e) for e in capable)
             remaining = [e for e in remaining if id(e) not in capable_set]
+
+        # await all jobs, swallowing exceptions
+        await asyncio.gather(*(worker.await_batch(job) for worker, job in jobs), return_exceptions=True)
 
         if remaining:
             raise ValueError("No worker could process these entries:", remaining)

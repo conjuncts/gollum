@@ -7,3 +7,6 @@ class FileManager:
 
     def path_permacache(self) -> Path:
         return self.root / "permacache"
+
+    def path_batchcache(self) -> Path:
+        return self.root / "batchcache"

@@ -1,4 +1,8 @@
+
+from gollum.batch.job import BatchJob
+from gollum.batch.result import BatchResult
 from gollum.worklist.base import WorklistEntry
+from gollum.batch.job import ImmediateBatchJob
 
 
 class Worker:
@@ -13,16 +17,37 @@ class Worker:
         """
         pass
 
-
-    async def process_batch(self, worklist_entries: list[WorklistEntry]) -> None:
-        """
-        Asynchronously accepts a list of WorklistEntry and deposits the true values.
-        """
-        for entry in worklist_entries:
-            await self.process(entry)
-
     async def can_process(self, worklist_entry: WorklistEntry) -> bool:
         """
         Asynchronously checks if the provider can process the given WorklistEntry.
         """
         pass
+
+    async def send_batch(self, worklist_entries: list[WorklistEntry]) -> BatchJob:
+        """
+        Asynchronously accepts a list of WorklistEntry and deposits the true values.
+        :param worklist_entries: A list of WorklistEntry objects to be processed.
+        :return: A BatchJob object or None if batch processing is not needed.
+        """
+        for entry in worklist_entries:
+            await self.process(entry)
+        return ImmediateBatchJob()
+
+
+    async def check_batch(self, batch_job: BatchJob) -> BatchResult:
+        """
+        Checks the batch job in its current state: possibly pending.
+        :param batch_job: The BatchJob object to fetch.
+        :return: A BatchResult object containing the batch job's results.
+        """
+        # Placeholder for actual implementation
+        return BatchResult("pending", [], [])
+
+    async def await_batch(self, batch_job: BatchJob) -> BatchResult:
+        """
+        Awaits for the batch job to fully complete and returns the results.
+        :param batch_job: The BatchJob object to await.
+        :return: A BatchResult object containing the batch job's results.
+        """
+        # Placeholder for actual implementation
+        return BatchResult("completed", [], [])
