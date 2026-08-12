@@ -3,27 +3,29 @@ import pytest
 
 from gollum.client.base import GollumClient
 from gollum.client.litellm import GollumRouter
+from gollum.provider.provider_registry import ProviderRegistry
 from gollum.worklist.concurrent_worklist import ConcurrentWorklist
 from gollum.worklist.workers.mock_worker import MockWorker
+from gollum.worklist.workers.polymorphic_worker import AsyncPolymorphicWorker
+from gollum.worklist.worklist import EagerWorklist
+
+
 
 @pytest.fixture
-def gollum_client() -> GollumClient:
-    # worklist = EagerWorklist()
+def mock_provider_registry() -> ProviderRegistry:
+    registry = ProviderRegistry()
+    registry.register_provider("openai", lambda: MockWorker("Hello from OpenAI!"))
+    registry.register_provider("google", lambda: MockWorker("Hello from Google!"))
+    
+    # Add mock providers to the registry as needed for testing
+    return registry
+
+@pytest.fixture
+def gollum_client(mock_provider_registry) -> GollumClient:
     worklist = ConcurrentWorklist()
 
-    # worker = MockWorker(parroted_value="Hello, World!")
 
-    # from openai import AsyncOpenAI
-    # worker = AsyncOpenAIWorker(client=AsyncOpenAI())
-    # if storage:
-    #     # permacache = PolarsPermacache(FileManager(".gollum"), flush_threshold=10)
-    #     permacache = DuckDBPermacache(FileManager(".gollum"), flush_threshold=10)
-    #     cache_method = CacheMethod()
-    #     cacher = PermacacheWorker(permacache, cache_method)
-    #     worklist.enroll_cache_worker(cacher)
-
-    # worker = AsyncPolymorphicWorker(provider_registry=get_default_registry())
-    worker = MockWorker(parroted_value="Hello, World!")
+    worker = AsyncPolymorphicWorker(provider_registry=mock_provider_registry)
     worklist.enroll_worker(worker)
     return GollumClient(worklist)
 
@@ -40,7 +42,7 @@ async def test_amain(gollum_client: GollumClient):
         ],
     )
 
-    assert response.choices[0].message.content == "Hello, World!"
+    assert response.choices[0].message.content == "Hello from OpenAI!"
 
 
 def test_main(gollum_client):
@@ -53,4 +55,4 @@ def test_main(gollum_client):
         ],
     )
 
-    assert response.choices[0].message.content == "Hello, World!"
+    assert response.choices[0].message.content == "Hello from OpenAI!"

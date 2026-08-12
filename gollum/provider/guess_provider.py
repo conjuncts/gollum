@@ -21,7 +21,11 @@ def guess_provider_name(model_name: str) -> tuple[str, str]:
         return "anthropic", model_name
 
     if model_name.startswith("gemini-"):
-        return "vertex_ai", model_name  # consistent with https://docs.litellm.ai/docs/providers/gemini
+        return "google", model_name
+    # LiteLLM - "vertex_ai" and "gemini"; no-prefix is "vertex_ai"
+    # OpenRouter - "google"
+    # https://openrouter.ai/google/gemini-2.5-pro
+    # https://docs.litellm.ai/docs/providers/gemini
 
     if model_name.startswith("mistral-"):
         return "mistral", model_name

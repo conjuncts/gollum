@@ -37,6 +37,7 @@ def get_default_registry():
         _default_registry = ProviderRegistry()
         _default_registry.register_provider("openai", _build_openai)
         _default_registry.register_provider("anthropic", _build_anthropic)
+        # need to register both google and gemini
     return _default_registry
 
 def register_provider(provider_name: str, produces_provider: Callable[[], Worker]):
