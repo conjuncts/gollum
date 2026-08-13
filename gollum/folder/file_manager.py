@@ -1,8 +1,9 @@
 from pathlib import Path
+from typing import Union
 
 
 class FileManager:
-    def __init__(self, root: Path):
+    def __init__(self, root: Union[Path, str]):
         self.root = Path(root)
 
     def path_permacache(self) -> Path:

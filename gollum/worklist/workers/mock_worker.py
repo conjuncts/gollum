@@ -11,7 +11,7 @@ class MockWorker(Worker):
     Worker but it just parrots a constant value
     """
 
-    def __init__(self, parroted_value: Union[str, List[str]]):
+    def __init__(self, parroted_value: Union[str, List[Union[str, dict]], dict]):
         if isinstance(parroted_value, str):
             self.parroted_value = [parroted_value]
         else:
@@ -24,5 +24,9 @@ class MockWorker(Worker):
         return value
 
     async def process(self, worklist_entry: WorklistEntry) -> bool:
-        worklist_entry.finish(GollumResponse(primitive_to_completion(self.get_value()), {}, {}))
+        value = self.get_value()
+        if isinstance(value, str):
+            value = primitive_to_completion(value)
+
+        worklist_entry.finish(GollumResponse(value, {}, {}))
         return True

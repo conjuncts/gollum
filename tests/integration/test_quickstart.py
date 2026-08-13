@@ -7,7 +7,6 @@ from gollum.provider.provider_registry import ProviderRegistry
 from gollum.worklist.concurrent_worklist import ConcurrentWorklist
 from gollum.worklist.workers.mock_worker import MockWorker
 from gollum.worklist.workers.polymorphic_worker import AsyncPolymorphicWorker
-from gollum.worklist.worklist import EagerWorklist
 
 
 

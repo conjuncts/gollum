@@ -1,4 +1,5 @@
 from functools import wraps
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Literal, Optional, Type, Union
 
 import httpx
@@ -30,7 +31,7 @@ if TYPE_CHECKING:
     from pydantic import BaseModel
 
 
-def _create_gollum_client(storage=False) -> GollumClient:
+def _create_gollum_client(location: Union[Path, str] = None) -> GollumClient:
     # worklist = EagerWorklist()
     worklist = ConcurrentWorklist()
 
@@ -38,9 +39,9 @@ def _create_gollum_client(storage=False) -> GollumClient:
 
     # from openai import AsyncOpenAI
     # worker = AsyncOpenAIWorker(client=AsyncOpenAI())
-    if storage:
+    if location is not None:
         # permacache = PolarsPermacache(FileManager(".gollum"), flush_threshold=10)
-        permacache = DuckDBPermacache(FileManager(".gollum"), flush_threshold=10)
+        permacache = DuckDBPermacache(FileManager(location), flush_threshold=10)
         cache_method = CacheMethod()
         cacher = PermacacheWorker(permacache, cache_method)
         worklist.enroll_cache_worker(cacher)
@@ -320,7 +321,7 @@ class GollumRouter:
         redis_port: Optional[int] = None,
         redis_password: Optional[str] = None,
         redis_db: Optional[int] = None,
-        cache_responses: Optional[bool] = False,
+        cache_responses: Optional[Union[str, bool]] = False,
         cache_kwargs: dict = {},  # additional kwargs to pass to RedisCache (see caching.py)
         caching_groups: Optional[List[tuple]] = None,  # if you want to cache across model groups
         client_ttl: int = 3600,  # ttl for cached clients - will re-initialize after this time in seconds
@@ -378,7 +379,13 @@ class GollumRouter:
         client: Optional[GollumClient] = None,
     ) -> None:
         if client is None:
-            client = _create_gollum_client(storage=cache_responses)
+            if isinstance(cache_responses, (Path, str)):
+                storage_destination = cache_responses
+            elif cache_responses:
+                storage_destination = ".gollum"
+            else:
+                storage_destination = None
+            client = _create_gollum_client(location=storage_destination)
         self.client = client
 
     @wraps(acompletion)
