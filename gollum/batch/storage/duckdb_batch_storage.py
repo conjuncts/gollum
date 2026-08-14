@@ -1,6 +1,6 @@
 from typing import Optional
 
-from gollum.batch.cache import BatchCache
+from gollum.batch.storage.batch_storage import BatchStorage
 from gollum.batch.job import BatchJob
 from gollum.folder.file_manager import FileManager
 
@@ -46,7 +46,7 @@ CREATE INDEX IF NOT EXISTS idx_batch_keys_batch_id
 """
 
 
-class DuckDBBatchCache(BatchCache):
+class DuckDBBatchStorage(BatchStorage):
     """
     DuckDB-backed BatchCache: tracks which in-flight batch job "owns"
     each cache_key, so gollum can avoid resubmitting work that's
@@ -149,7 +149,10 @@ class DuckDBBatchCache(BatchCache):
             rows = self._con.execute(
                 f"SELECT batch_id, provider_name FROM {_BATCHES_TABLE}"
             ).fetchall()
-            return [BatchJob(batch_id, provider_name) for batch_id, provider_name in rows]
+            return [
+                BatchJob(batch_id, provider_name)
+                for batch_id, provider_name in rows
+            ]
 
     def close(self):
         with self._lock:

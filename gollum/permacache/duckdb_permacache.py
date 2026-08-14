@@ -89,6 +89,27 @@ _PAYLOAD_COLUMNS = [c for c in _CACHE_SCHEMA if c != "cache_key"]
 _UPSERT_SET_CLAUSE = ", ".join(f"{c} = excluded.{c}" for c in _PAYLOAD_COLUMNS)
 
 
+
+_BATCHES_TABLE = "batches"
+_BATCH_KEYS_TABLE = "batch_keys"
+
+_DDL = f"""
+CREATE TABLE IF NOT EXISTS {_BATCHES_TABLE} (
+    batch_id VARCHAR PRIMARY KEY,
+    provider_name VARCHAR
+);
+
+CREATE TABLE IF NOT EXISTS {_BATCH_KEYS_TABLE} (
+    cache_key VARCHAR PRIMARY KEY,
+    batch_id VARCHAR
+);
+
+CREATE INDEX IF NOT EXISTS idx_batch_keys_batch_id
+    ON {_BATCH_KEYS_TABLE} (batch_id);
+"""
+
+
+
 class DuckDBPermacache(Permacache):
     """
     DuckDB-backed permacache: same on-disk shape and columns as
@@ -133,6 +154,7 @@ class DuckDBPermacache(Permacache):
         self._con.execute(
             pl_schema_to_duckdb_ddl(_CACHE_SCHEMA, _CACHE_TABLE, primary_key="cache_key")
         )
+        self._con.execute(_DDL)
 
         # Rows accumulated since the last flush, keyed by cache_key, so
         # retrieve() can see just-stored values before they hit disk.

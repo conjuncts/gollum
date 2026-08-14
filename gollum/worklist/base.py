@@ -1,7 +1,7 @@
 import asyncio
 from typing import TYPE_CHECKING, Literal
 
-from gollum.types import GollumRequest, GollumResponse
+from gollum.types import GollumInterrupt, GollumRequest, GollumResponse
 
 if TYPE_CHECKING:
     from gollum.worklist.worklist import Worklist
@@ -21,6 +21,7 @@ class WorklistEntry:
         # self._lock = threading.Lock()
         # self.done = threading.Event()
         self._future: asyncio.Future[GollumResponse] = worklist.get_event_loop().create_future()
+        self._must_interrupt = False
 
     # def start(self):
     #     self.status = "in_progress"
@@ -34,6 +35,8 @@ class WorklistEntry:
         )
 
     async def wait(self) -> GollumResponse:
+        if self._must_interrupt:
+            raise GollumInterrupt()
         return await self._future
 
     def __await__(self):

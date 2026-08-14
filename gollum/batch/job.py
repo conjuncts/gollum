@@ -1,3 +1,8 @@
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    pass
+
 class BatchJob:
     def __init__(self, batch_id: str, provider_name: str):
         self.batch_id = batch_id

@@ -4,14 +4,10 @@ from typing import Optional
 from gollum.batch.job import BatchJob
 
 
-class BatchCache(ABC):
+class BatchStorage(ABC):
     """
     A cache for storing batch results
     """
-
-    def __init__(self):
-        pass
-
 
     @abstractmethod
     async def record_batch(self, batch: BatchJob, cache_keys: list[str]):
@@ -22,7 +18,7 @@ class BatchCache(ABC):
         pass
 
     @abstractmethod
-    async def retrieve(self, cache_key: str, likely_partition: str) -> Optional[BatchJob]:
+    async def retrieve_batch(self, cache_key: str, likely_partition: str) -> Optional[BatchJob]:
         """
         Checks if a batch job has been recorded for this cache_key, and returns it if so.
         """

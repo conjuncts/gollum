@@ -17,11 +17,10 @@ class Worker:
         """
         pass
 
-    async def can_process(self, worklist_entry: WorklistEntry) -> bool:
-        """
-        Asynchronously checks if the provider can process the given WorklistEntry.
-        """
-        pass
+class BatchWorker:
+    """
+    Works in batches.
+    """
 
     async def send_batch(self, worklist_entries: list[WorklistEntry]) -> BatchJob:
         """

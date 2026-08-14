@@ -5,8 +5,9 @@ from gollum.types import GollumResponse
 
 
 class BatchResult:
-    def __init__(self, status: Literal["pending", "completed", "error"], results: List[GollumResponse], errors: List[dict]):
-        self.status = status
+    def __init__(self, status: Literal["pending", "completed", "error"], cache_keys: list[str], results: List[GollumResponse], errors: List[dict]):
+        self.status: Literal["pending", "completed", "error"] = status
+        self.cache_keys = cache_keys
         self.results = results
         self.errors = errors
 
