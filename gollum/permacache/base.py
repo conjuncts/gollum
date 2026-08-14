@@ -20,3 +20,13 @@ class Permacache(ABC):
     @abstractmethod
     async def retrieve(self, cache_key: str, likely_partition: str) -> Optional[GollumResponse]:
         pass
+
+    @abstractmethod
+    async def store_custom_id(self, custom_id: str, cache_key: str, likely_partition: str):
+        """
+        Link cache_key <=> custom_id, for use in batch processing.
+        TODO: consider directly making custom_id the cache_key, as that would mean this
+        association would not have to go through disk, at expense of slightly larger
+        requests.
+        """
+        pass
