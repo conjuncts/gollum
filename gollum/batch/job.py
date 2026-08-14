@@ -18,18 +18,3 @@ class BatchJob:
         Waits for the batch job to complete. This is a placeholder for actual implementation.
         """
         pass
-
-
-class ImmediateBatchJob(BatchJob):
-    """
-    Represents a batch job that is completed immediately.
-    """
-
-    def __init__(self):
-        super().__init__(batch_id="immediate", provider_name=None)
-
-    async def wait_for_completion(self):
-        """
-        Since this is an immediate batch job, it is already complete.
-        """
-        pass

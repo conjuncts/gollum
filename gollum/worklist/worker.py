@@ -2,7 +2,6 @@
 from gollum.batch.job import BatchJob
 from gollum.batch.result import BatchResult
 from gollum.worklist.base import WorklistEntry
-from gollum.batch.job import ImmediateBatchJob
 
 
 class Worker:
@@ -28,10 +27,7 @@ class BatchWorker:
         :param worklist_entries: A list of WorklistEntry objects to be processed.
         :return: A BatchJob object or None if batch processing is not needed.
         """
-        for entry in worklist_entries:
-            await self.process(entry)
-        return ImmediateBatchJob()
-
+        pass
 
     async def check_batch(self, batch_job: BatchJob) -> BatchResult:
         """
