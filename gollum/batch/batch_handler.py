@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, Dict, List, Literal, Optional
 
 
 from gollum.batch.job import BatchJob
+from gollum.batch.result import BatchResult
 from gollum.batch.splitting_method import SplittingMethod
 from gollum.batch.storage.batch_storage import BatchStorage
 from gollum.permacache.base import Permacache
@@ -94,6 +95,24 @@ class BatchHandler:
             await self._poll_point_check()
             await asyncio.sleep(self.polling_frequency)
 
+    async def batch_arrival(self, job: BatchJob, batch: BatchResult):
+        """
+        A1. permastore
+        A2. lock (drain board, free BS, finish entries)
+        """
+        # NOTE: when a batch comes in, it could take a long time... then the lock is held up
+        for cache_key, item_result in zip(batch.cache_keys, batch.results):
+            await self.permacache.store(item_result, cache_key, "")
+
+        async with self._board_lock:
+            for cache_key, item_result in zip(batch.cache_keys, batch.results):
+                waiters = self.reconnection_board.pop(cache_key, None)
+                if waiters:
+                    for entry in waiters:
+                        entry.finish(item_result)
+
+            await self.batch_storage.free_batch(job)
+
     async def _poll_point_check(self):
         """
         Poll point check of all batches; also handles receiving results.
@@ -106,17 +125,7 @@ class BatchHandler:
                 continue
 
             elif check_result.status == "completed":
-                async with self._board_lock:
-                    # NOTE: when a batch comes in, it could take a long time... then the lock is held up
-                    for cache_key, item_result in zip(check_result.cache_keys, check_result.results):
-                        await self.permacache.store(item_result, cache_key, "")
-
-                        waiters = self.reconnection_board.pop(cache_key, None)
-                        if waiters:
-                            for entry in waiters:
-                                entry.finish(item_result)
-
-                    await self.batch_storage.free_batch(job)
+                await self.batch_arrival(job, check_result)
 
             else:
                 # e.g. "failed" or any other terminal/unknown status.
@@ -164,31 +173,43 @@ class BatchHandler:
         This typically happens once the WorklistEntry is created as it comes in (ie. in kickstart_work) to make sure
         that .
 
+        Requirements:
+        1. No "lost" entries: every entry must eventually complete
+        2. No "duplicate" entries: an entry sent in a batch (possibly from a previous session)
+            must not be sent in a batch again.
+        
 
         If we can guarantee a lifecycle such 
         1. WorklistEntry created 
         2. reconnect() is called to connect it to a stored batch job - ie. from a previous session
             Suppose reconnection is successful: that is, a previous batch job exists.
             Since that stored batch job is being polled, eventually it will complete
-        3. if cannot reconnect, then this entry must be put in a batch! ==> will be sent into a batch
+            and because we reconnected it, the entry will be finished.
+        3. if cannot reconnect, (no previous batch job found) then there are two options:
+            a) the batch job arrived already *and* batch was freed - in this very session. 
+                But then we know our entry must be in the permacache, 
+                so if we always check the permacache after, then job done.
+                (TODO alternative: simply keep track of all freed cache_keys, which can't be that many
+            b) no batch job ever existed => this entry must be put in a batch! ==> will be sent into a batch
             and hence (eventually) that batch will be polled and completed.
 
         Then every entry will eventually complete.
+
+        Corollary: the caller MUST check permacache after checking reconnect() because of 3a.
+
+        R1. lock (read BS, register board)
+        R2. await permacache
+
 
         :return: True if the entry was successfully reconnected to a batch job, False otherwise.
         """
         cache_key = self.cache_method.generate_cache_key(entry.request)
 
+        reconnection_status = True
         async with self._board_lock:
             # this is in the hot loop (once per request)...
             # if a batch comes in, then the lock means that the hot loop is completely held up...
             # this can cause a significant performance bottleneck.
-
-            # if permacache has it, that means it already came in, we're done!
-            result = await self.permacache.retrieve(cache_key, "")
-            if result is not None:
-                entry.finish(result)
-                return True
 
             # otherwise, put it on the reconnection board -- but only if we
             # can actually find the batch job it belongs to. If we can't,
@@ -198,7 +219,7 @@ class BatchHandler:
             if job is None:
                 # This entry is NOT associated with a batch job
                 # Therefore, returning false will signal to the caller that this entry should be put into a new batch job.
-                return False
+                reconnection_status = False
             elif self.strategy == "interrupt":
                 # the batch job is in progress. If the user wants an immediate answer, we can only interrupt.
                 entry._must_interrupt = True
@@ -207,4 +228,14 @@ class BatchHandler:
                 # so once complete, we need to make sure that this entry is finished.
                 # Hence, we register it on the reconnection board - entry listens for completion.
                 self.reconnection_board.setdefault(cache_key, []).append(entry)
-            return True
+
+        if not reconnection_status and self.permacache is not None:
+            # check permacache now
+            # this is exactly permacacheworker's duty - which
+            # reveals that reconnect() is exactly the same shape as permacacheworker's process()
+            cached_result = await self.permacache.retrieve(cache_key, "")
+            if cached_result is not None:
+                entry.finish(cached_result)
+                reconnection_status = True
+        # check
+        return reconnection_status
