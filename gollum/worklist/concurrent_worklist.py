@@ -1,4 +1,5 @@
 import asyncio
+import itertools
 
 from gollum.worklist.base import WorklistEntry
 from gollum.worklist.worklist import Worklist
@@ -6,17 +7,12 @@ from gollum.worklist.worklist import Worklist
 
 class ConcurrentWorklist(Worklist):
     """
-    Worklist that processes entries concurrently using asyncio tasks on the
-    *same* event loop as the caller.
+    Concurrent worklist that round-robins the worker try-order across entries.
 
-    Why not a separate event loop: asyncio concurrency comes from cooperative
-    yielding at `await` points, not from OS threads. Scheduling each entry as
-    its own Task on the current loop already lets N entries be in flight at
-    once. A second loop is only useful if the work is CPU-bound or uses
-    blocking I/O -- and in that case the fix belongs inside `Worker.process`
-    (e.g. `await loop.run_in_executor(None, blocking_fn)`), not in the
-    worklist. Running two asyncio loops in one process adds real complexity
-    (run_coroutine_threadsafe, cross-loop futures) for no benefit here.
+    Rotation state (`_rr_counter`) is advanced synchronously with no `await`
+    in between, so -- like `kickstart_work`'s enroll-draining loop -- it's
+    safe under asyncio's single-threaded cooperative scheduling without a
+    lock; nothing can interleave between reading and advancing the counter.
     """
 
     def __init__(self, max_concurrency: int | None = None):
@@ -27,6 +23,8 @@ class ConcurrentWorklist(Worklist):
         # only shared-state touchpoints across concurrent entries.
         self._cache_lock = asyncio.Lock()
         self._pending_tasks: set[asyncio.Task] = set()
+        # Monotonic counter used to pick each entry's starting worker index.
+        self._rr_counter = itertools.count()
 
     async def kickstart_work(self, entry: WorklistEntry):
         """
@@ -54,6 +52,16 @@ class ConcurrentWorklist(Worklist):
         else:
             await self._process_entry_inner(entry)
 
+    def _next_worker_order(self) -> list:
+        """
+        Return `self.workers` rotated so consecutive calls start from a
+        different worker (wrapping around), e.g. for workers [A, B, C]:
+        call 1 -> [A, B, C], call 2 -> [B, C, A], call 3 -> [C, A, B], ...
+        """
+        n = len(self.workers)
+        start = next(self._rr_counter) % n
+        return self.workers[start:] + self.workers[:start]
+
     async def _process_entry_inner(self, entry: WorklistEntry):
         # cache hit
         if self.cache_worker is not None:
@@ -61,8 +69,8 @@ class ConcurrentWorklist(Worklist):
                 if await self.cache_worker.process(entry):
                     return
 
-        # live processing
-        for worker in self.workers:
+        # live processing, starting from the round-robin-selected worker
+        for worker in self._next_worker_order():
             if await worker.process(entry):
                 break
         else:
