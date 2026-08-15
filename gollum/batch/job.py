@@ -12,9 +12,3 @@ class BatchJob:
 
     def __repr__(self):
         return f"BatchJob(batch_id={self.batch_id}, provider_name={self.provider_name})"
-
-    async def wait_for_completion(self):
-        """
-        Waits for the batch job to complete. This is a placeholder for actual implementation.
-        """
-        pass

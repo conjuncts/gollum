@@ -34,6 +34,12 @@ class WorklistEntry:
             self._future.set_result, payload
         )
 
+    def fail(self, exc: Exception):
+        self.status = "done"
+        self._future.get_loop().call_soon_threadsafe(
+            self._future.set_exception, exc
+        )
+
     async def wait(self) -> GollumResponse:
         if self._must_interrupt:
             raise GollumInterrupt()

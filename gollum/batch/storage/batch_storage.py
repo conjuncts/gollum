@@ -25,10 +25,19 @@ class BatchStorage(ABC):
         pass
 
     @abstractmethod
-    async def free_batch(self, batch: BatchJob):
+    async def complete_batch(self, batch: BatchJob):
         """
-        Frees the cache entries associated with this batch job.
+        Marks the cache entries associated with this batch job as complete.
         Should be called when the batch completes (individual cache_keys then possibly transfer to the permacache)
+        But do NOT immediately delete these entries - wait until free_completed() (typically called upon the start of the next session)
+        """
+        pass
+
+    @abstractmethod
+    async def free_completed(self):
+        """
+        Frees the cache entries associated with completed batch jobs.
+        Should be called after the batch completes and therefore the results have been stored in the permacache.
         """
         pass
 

@@ -35,8 +35,7 @@ class BatchWorker:
         :param batch_job: The BatchJob object to fetch.
         :return: A BatchResult object containing the batch job's results.
         """
-        # Placeholder for actual implementation
-        return BatchResult("pending", [], [])
+        pass
 
     async def await_batch(self, batch_job: BatchJob) -> BatchResult:
         """
@@ -44,5 +43,4 @@ class BatchWorker:
         :param batch_job: The BatchJob object to await.
         :return: A BatchResult object containing the batch job's results.
         """
-        # Placeholder for actual implementation
-        return BatchResult("completed", [], [])
+        pass
