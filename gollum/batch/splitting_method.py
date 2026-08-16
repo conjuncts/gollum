@@ -18,7 +18,7 @@ class SplittingMethod:
         batches_per_model_name: Dict[str, List[WorklistEntry]] = {}
         for entry in entries:
             request = entry.request
-            model_name = request.model_name
+            model_name = request.chat_completion["model"]
             if model_name not in batches_per_model_name:
                 batches_per_model_name[model_name] = []
             batches_per_model_name[model_name].append(entry)
