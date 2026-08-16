@@ -109,6 +109,7 @@ class BatchHandler:
         cache_method: Optional[CacheMethod] = None,
         strategy: Literal["interrupt", "poll"] = "poll",
         polling_frequency: float = 60.0,  # poll every 60 seconds
+        confirm_before_submit: bool = False,
     ):
         self.batch_storage = batch_storage
         self.batch_worker: BatchWorker = batch_worker
@@ -119,6 +120,11 @@ class BatchHandler:
         self.permacache = permacache
         self.cache_method = cache_method
         self.polling_frequency = polling_frequency
+        # If True, submit_entries() prompts for a y/n confirmation on the
+        # console before sending each mini-batch to the provider -- useful
+        # for real (non-fake) providers like BatchOpenAIWorker, where a
+        # submitted batch costs money and can take hours to resolve.
+        self.confirm_before_submit = confirm_before_submit
 
         self._job_states: Dict[str, JobState] = {}
         # Guards *creation* of a JobState only. Never held across an await,
@@ -188,7 +194,13 @@ class BatchHandler:
         mini_batches = self.splitting_method.split(entries)
 
         for mini_batch in mini_batches:
+            if self.confirm_before_submit and not await self._confirm_submit(mini_batch):
+                for item in mini_batch:
+                    item.fail(Exception("Batch submission cancelled by user"))
+                continue
+
             job = await self.batch_worker.send_batch(mini_batch)
+            print(f"[BatchHandler] sent batch {job.batch_id} ({len(mini_batch)} entries)")
             cache_keys = [self.cache_method.generate_cache_key(item.request) for item in mini_batch]
             await self.batch_storage.record_batch(job, cache_keys)
 
@@ -216,6 +228,17 @@ class BatchHandler:
             # uses.
             for item, cache_key in zip(mini_batch, cache_keys):
                 await self._resolve_from_permacache(item, cache_key)
+
+    async def _confirm_submit(self, mini_batch: List[WorklistEntry]) -> bool:
+        """Blocks (off the event loop) for a y/n console confirmation before
+        sending `mini_batch` to the provider. See `confirm_before_submit`."""
+        def _ask() -> bool:
+            answer = input(
+                f"About to submit a batch of {len(mini_batch)} entries. Proceed? [y/N] "
+            )
+            return answer.strip().lower() in ("y", "yes")
+
+        return await asyncio.to_thread(_ask)
 
     # ---------------------------------------------------------------- #
     # RECONNECT
@@ -353,6 +376,8 @@ class BatchHandler:
 
             if check_result.status == "pending":
                 continue
+
+            print(f"[BatchHandler] received batch {job.batch_id} (status={check_result.status})")
 
             # "completed" and "error" both flow through batch_arrival,
             # which resolves whatever succeeded and retries whatever
