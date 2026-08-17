@@ -13,8 +13,6 @@ from gollum.worklist.workers.mock_worker import MockWorker
 from gollum.worklist.workers.permacache_worker import PermacacheWorker
 from gollum.worklist.worklist import EagerWorklist
 
-
-
 @pytest.fixture
 def gollum_client(tmp_path) -> GollumClient:
     worklist = EagerWorklist()

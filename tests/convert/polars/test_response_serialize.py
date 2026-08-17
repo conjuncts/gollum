@@ -4,9 +4,9 @@ from gollum.convert.polars.serialize_response import (
     pl_serialize_chat_response,
     pl_deserialize_chat_response,
 )
-from gollum.types.chat_completions import ChatCompletionResponseModel
+from gollum.types.chat_completions import ChatCompletionResponse
 
-sample_responses: list[ChatCompletionResponseModel] = [
+sample_responses: list[ChatCompletionResponse] = [
     # --- 0. Minimal response --------------------------------------------
     {
         "id": "chatcmpl-0",

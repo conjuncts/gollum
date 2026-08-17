@@ -55,56 +55,37 @@ the two styles against the same worklist.)
 """
 
 import asyncio
+import logging
+import sys
 
 from dotenv import load_dotenv
-from openai import AsyncOpenAI
 
-from gollum.batch.batch_handler import BatchHandler
 from gollum.batch.batch_trigger import CompositeTrigger, IntervalTrigger, SizeTrigger
-from gollum.batch.storage.duckdb_batch_storage import DuckDBBatchStorage
 from gollum.client.base import GollumClient
 from gollum.client.litellm import GollumRouter
-from gollum.folder.file_manager import FileManager
-from gollum.permacache.cache_method import CacheMethod
-from gollum.permacache.duckdb_permacache import DuckDBPermacache
-from gollum.provider.openai_batch import BatchOpenAIWorker
-from gollum.worklist.batch_worklist import BatchWorklist
 
 
 async def make_batch_router() -> GollumRouter:
     """
     Wires BatchWorklist up behind a GollumClient/GollumRouter, so callers
     get the plain `router.acompletion(...)` interface while batching
-    happens behind the scenes. This is the whole integration -- nothing
-    about GollumClient/GollumRouter needed to change to support it.
+    happens behind the scenes. `GollumClient.create_batch()` is the whole
+    integration -- nothing about GollumClient/GollumRouter needed to
+    change to support it.
 
     Must be awaited from the same event loop that will later drive
-    `router.acompletion(...)` calls -- see module docstring.
+    `router.acompletion(...)` calls -- see module docstring, and
+    `create_batch()`'s own docstring for why.
     """
-    fm = FileManager(".gollum/batch-router-demo")
-
-    handler = BatchHandler(
-        batch_storage=DuckDBBatchStorage(fm),
-        batch_worker=BatchOpenAIWorker(AsyncOpenAI()),
-        permacache=DuckDBPermacache(fm),
-        cache_method=CacheMethod(),
-        polling_frequency=30.0,  # how often to check OpenAI for batch completion
-        confirm_before_submit=True,  # ask before spending money on a real batch
+    client = await GollumClient.create_batch(
+        ".gollum/batch-router-demo",
+        # Flush every 20 queued requests, or every 5 seconds -- whichever
+        # comes first -- so a handful of concurrent callers get batched
+        # together instead of each triggering its own tiny batch. (The
+        # factory default -- 100 entries / 30s -- is tuned for less bursty,
+        # more automated use than this demo's three concurrent questions.)
+        trigger=CompositeTrigger([SizeTrigger(20), IntervalTrigger(5.0)]),
     )
-
-    # Flush every 20 queued requests, or every 5 seconds -- whichever comes
-    # first -- so a handful of concurrent callers get batched together
-    # instead of each triggering its own tiny batch.
-    trigger = CompositeTrigger([SizeTrigger(20), IntervalTrigger(5.0)])
-
-    worklist = BatchWorklist(handler, trigger=trigger)
-    client = GollumClient(worklist)
-
-    # Boot the poll loop on THIS loop -- the same one that will later
-    # await router.acompletion(...) -- rather than GollumClient's private
-    # background thread, which router.acompletion() doesn't use anyway.
-    await worklist.start()
-
     return GollumRouter(client=client)
 
 
@@ -133,7 +114,7 @@ async def amain():
     # Enroll all three concurrently, on this same loop. Under the hood
     # they all land in the same BatchWorklist and (per the trigger above)
     # go out as ONE batch -- transparently, from the caller's point of view.
-    print("asking all three questions concurrently...")
+    print("asking all questions concurrently...")
     answers = await asyncio.gather(*(ask(router, q) for q in questions))
 
     for question, answer in zip(questions, answers):
@@ -145,5 +126,11 @@ async def amain():
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.WARNING,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        stream=sys.stdout,
+    )
+    logging.getLogger("gollum").setLevel(logging.INFO)
     load_dotenv()
     asyncio.run(amain())

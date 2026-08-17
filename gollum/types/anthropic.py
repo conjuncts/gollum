@@ -181,6 +181,17 @@ class AnthropicMetadata(TypedDict, total=False):
     user_id: str
 
 
+# ---------- structured outputs ----------
+
+class AnthropicOutputFormat(TypedDict, total=False):
+    type: Required[Literal["json_schema"]]
+    schema: Required[dict]
+
+
+class AnthropicOutputConfig(TypedDict, total=False):
+    format: Required[AnthropicOutputFormat]
+
+
 # ---------- request ----------
 
 class AnthropicRequest(TypedDict, total=False):
@@ -206,3 +217,4 @@ class AnthropicRequest(TypedDict, total=False):
     service_tier: Literal["standard", "priority"]
     cache_control: AnthropicCacheControl
     parallel_tool_calls: bool
+    output_config: AnthropicOutputConfig

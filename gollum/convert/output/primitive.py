@@ -1,7 +1,7 @@
 from gollum.types.chat_completions import ChatCompletionResponse
 
 
-def primitive_to_completion(value: str) -> ChatCompletionResponse: # -> ChatCompletionResponseModel
+def primitive_to_completion(value: str) -> ChatCompletionResponse:
     return {
         "id": "mock",
         "choices": [

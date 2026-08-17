@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from dataclasses import dataclass, field
 from typing import Dict, List, Literal, Optional
 
@@ -10,6 +11,8 @@ from gollum.permacache.base import Permacache
 from gollum.permacache.cache_method import CacheMethod
 from gollum.worklist.base import WorklistEntry
 from gollum.worklist.worker import BatchWorker
+
+logger = logging.getLogger(__name__)
 
 JobStatus = Literal["pending", "finalizing", "complete"]
 
@@ -147,6 +150,18 @@ class BatchHandler:
         begins, per the Option-2 BatchStorage contract.
         """
         await self.batch_storage.free_completed()
+
+        pending_jobs = await self.batch_storage.get_all_batches()
+        if pending_jobs:
+            batch_ids = ", ".join(job.batch_id for job in pending_jobs)
+            logger.info(
+                "Reconnecting to %d batch(es) tracked from a previous session: %s",
+                len(pending_jobs),
+                batch_ids,
+            )
+        else:
+            logger.info("No pending batches tracked from a previous session.")
+
         await self._restart_polling()
 
     async def _restart_polling(self):
@@ -200,7 +215,7 @@ class BatchHandler:
                 continue
 
             job = await self.batch_worker.send_batch(mini_batch)
-            print(f"[BatchHandler] sent batch {job.batch_id} ({len(mini_batch)} entries)")
+            logger.info("Sent batch %s (%d entries)", job.batch_id, len(mini_batch))
             cache_keys = [self.cache_method.generate_cache_key(item.request) for item in mini_batch]
             await self.batch_storage.record_batch(job, cache_keys)
 
@@ -377,7 +392,7 @@ class BatchHandler:
             if check_result.status == "pending":
                 continue
 
-            print(f"[BatchHandler] received batch {job.batch_id} (status={check_result.status})")
+            logger.info("Received batch %s (status=%s)", job.batch_id, check_result.status)
 
             # "completed" and "error" both flow through batch_arrival,
             # which resolves whatever succeeded and retries whatever

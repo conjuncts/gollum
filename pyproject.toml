@@ -24,6 +24,12 @@ duckdb = [
 ]
 
 
+[tool.pytest.ini_options]
+markers = [
+    "duckdb: tests against DuckDBPermacache -- slower (real on-disk DuckDB connections); skipped by default, run with `-m duckdb` or `-m ''`.",
+]
+addopts = "-m 'not duckdb'"
+
 [tool.coverage.report]
 exclude_also = [
 "@(abc\\.)?abstractmethod",

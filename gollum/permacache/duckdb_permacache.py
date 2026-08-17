@@ -9,8 +9,10 @@ import polars as pl
 import duckdb
 
 import atexit
+import itertools
 import json
 import threading
+import uuid
 from pathlib import Path
 
 
@@ -84,9 +86,47 @@ _CACHE_SCHEMA = pl.Schema({
     "extras": pl.Utf8,
     "metadata": pl.Utf8,
     "original": pl.Utf8,
+    # Which writer session produced this row, and that session's own
+    # incrementing counter at the time of the write -- lets rows be
+    # ordered/deduped per-session without relying on wall-clock time.
+    # Appended at the end (rather than interleaved) so ALTER TABLE ADD
+    # COLUMN on pre-existing on-disk caches lines up column-order-wise
+    # with `CREATE TABLE ... (schema)` on fresh ones -- both end up with
+    # these two columns last, which `INSERT ... SELECT * FROM batch_df`
+    # relies on.
+    "session_id": pl.Utf8,
+    "seq": pl.UInt64,
 })
-_PAYLOAD_COLUMNS = [c for c in _CACHE_SCHEMA if c != "cache_key"]
-_UPSERT_SET_CLAUSE = ", ".join(f"{c} = excluded.{c}" for c in _PAYLOAD_COLUMNS)
+_CACHE_COLUMNS = list(_CACHE_SCHEMA.names())
+
+# Migration for on-disk caches created before session_id/seq existed.
+_ADD_SESSION_COLUMNS_DDL = f"""
+ALTER TABLE {_CACHE_TABLE} ADD COLUMN IF NOT EXISTS session_id VARCHAR;
+ALTER TABLE {_CACHE_TABLE} ADD COLUMN IF NOT EXISTS seq UBIGINT;
+"""
+
+
+def _drop_cache_key_primary_key(con: "duckdb.DuckDBPyConnection"):
+    """One-time migration: older on-disk caches declared cache_key PRIMARY
+    KEY (single-row-per-key, upsert semantics). We now append a row per
+    store() instead (so session_id/seq form a history), which means
+    duplicate cache_keys are expected -- but DuckDB has no ALTER TABLE DROP
+    CONSTRAINT, so the only way to remove the constraint is to rebuild the
+    table without it and copy the rows over.
+    """
+    has_pk = con.execute(
+        "SELECT 1 FROM duckdb_constraints() "
+        "WHERE table_name = ? AND constraint_type = 'PRIMARY KEY'",
+        [_CACHE_TABLE],
+    ).fetchone()
+    if not has_pk:
+        return
+    tmp_table = f"{_CACHE_TABLE}_pre_pk_migration"
+    con.execute(f"ALTER TABLE {_CACHE_TABLE} RENAME TO {tmp_table}")
+    con.execute(pl_schema_to_duckdb_ddl(_CACHE_SCHEMA, _CACHE_TABLE))
+    cols_sql = ", ".join(f'"{c}"' for c in _CACHE_COLUMNS)
+    con.execute(f"INSERT INTO {_CACHE_TABLE} SELECT {cols_sql} FROM {tmp_table}")
+    con.execute(f"DROP TABLE {tmp_table}")
 
 
 
@@ -113,20 +153,22 @@ CREATE INDEX IF NOT EXISTS idx_batch_keys_batch_id
 class DuckDBPermacache(Permacache):
     """
     DuckDB-backed permacache: same on-disk shape and columns as
-    PolarsPermacache, but stored in a single native `.duckdb` file with
-    `cache_key` declared PRIMARY KEY. DuckDB builds an ART index on that
-    column, so `retrieve()` is a real indexed point lookup (~O(log n),
-    effectively O(1) in practice) instead of PolarsPermacache's
-    read-the-whole-shard-into-memory approach.
+    PolarsPermacache, but stored in a single native `.duckdb` file with a
+    (non-unique) index on `cache_key`. Every store() appends a new row
+    rather than upserting, tagged with the writer's session_id and a
+    per-session incrementing seq, so a key's write history is preserved;
+    `retrieve()` reads back the most recently inserted row for that key
+    (a real indexed lookup, ~O(log n)/O(1) in practice, followed by
+    "take the last match" rather than a full-shard scan).
 
     Compared to PolarsPermacache:
     - No manual sharding: DuckDB's own file format handles large single
       files well, and it does its own block-level compression (dictionary
       encoding, RLE, FSST, bit-packing) comparable to Parquet's.
-    - No manual "concat + unique(keep='last')" dedup pass: upserts are
-      expressed directly as `INSERT ... ON CONFLICT (cache_key) DO UPDATE`.
+    - No manual "concat + unique(keep='last')" dedup pass at write time:
+      old rows for a key are simply left in place rather than merged.
     - Writes are still batched in memory up to `flush_threshold` and
-      flushed as one vectorized upsert (via a Polars DataFrame handed to
+      flushed as one vectorized append (via a Polars DataFrame handed to
       DuckDB through its zero-copy Arrow/Polars interop), rather than
       row-by-row inserts.
     - Rows written but not yet flushed are kept in `_pending_index` so
@@ -152,9 +194,21 @@ class DuckDBPermacache(Permacache):
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         self._con = duckdb.connect(str(self._db_path))
         self._con.execute(
-            pl_schema_to_duckdb_ddl(_CACHE_SCHEMA, _CACHE_TABLE, primary_key="cache_key")
+            pl_schema_to_duckdb_ddl(_CACHE_SCHEMA, _CACHE_TABLE)
+        )
+        self._con.execute(_ADD_SESSION_COLUMNS_DDL)
+        _drop_cache_key_primary_key(self._con)
+        self._con.execute(
+            f"CREATE INDEX IF NOT EXISTS idx_cache_key ON {_CACHE_TABLE} (cache_key)"
         )
         self._con.execute(_DDL)
+
+        # One id per DuckDBPermacache instance (i.e. per process/run that
+        # opens this cache), plus a counter that increments on every store()
+        # within that session -- gives each row a (session_id, seq) pair
+        # identifying which run wrote it and in what order.
+        self._session_id = str(uuid.uuid4())
+        self._seq_counter = itertools.count(1)
 
         # Rows accumulated since the last flush, keyed by cache_key, so
         # retrieve() can see just-stored values before they hit disk.
@@ -180,6 +234,8 @@ class DuckDBPermacache(Permacache):
                 "extras": json.dumps(response.extras),
                 "metadata": json.dumps(response.metadata),
                 "original": None,
+                "session_id": self._session_id,
+                "seq": next(self._seq_counter),
             })
             if len(self._pending_rows) >= self._flush_threshold:
                 self._flush()
@@ -188,9 +244,12 @@ class DuckDBPermacache(Permacache):
         with self._lock:
             if cache_key in self._pending_index:
                 return self._pending_index[cache_key]
+            # cache_key is no longer unique (rows are appended, one per
+            # store()), so pick the most recently inserted row for this key.
             row = self._con.execute(
                 f"SELECT chat_completion, extras, metadata, original "
-                f"FROM {_CACHE_TABLE} WHERE cache_key = ?",
+                f"FROM {_CACHE_TABLE} WHERE cache_key = ? "
+                f"ORDER BY rowid DESC LIMIT 1",
                 [cache_key],
             ).fetchone()
             if row is None:
@@ -227,9 +286,8 @@ class DuckDBPermacache(Permacache):
         # the calling frame for a matching local/global name) -- no need to
         # register it explicitly.
         batch_df = pl.DataFrame(self._pending_rows, schema_overrides=_CACHE_SCHEMA)  # noqa: F841
-        self._con.execute(
-            f"INSERT INTO {_CACHE_TABLE} SELECT * FROM batch_df "
-            f"ON CONFLICT (cache_key) DO UPDATE SET {_UPSERT_SET_CLAUSE}"
-        )
+        # cache_key has no uniqueness constraint any more -- every store()
+        # is appended as its own row, so retrieve() picks the latest one.
+        self._con.execute(f"INSERT INTO {_CACHE_TABLE} SELECT * FROM batch_df")
         self._pending_rows = []
         self._pending_index = {}

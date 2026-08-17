@@ -1,6 +1,7 @@
 import asyncio
 import json
 import io
+import logging
 from typing import TYPE_CHECKING, Any, Optional
 
 from gollum.batch.job import BatchJob
@@ -13,6 +14,8 @@ from gollum.worklist.worker import BatchWorker
 if TYPE_CHECKING:
     from openai import AsyncOpenAI
     from openai.types.batch import Batch
+
+logger = logging.getLogger(__name__)
 
 
 class BatchOpenAIWorker(BatchWorker):
@@ -84,7 +87,7 @@ class BatchOpenAIWorker(BatchWorker):
             completion_window=self.completion_window,
         )
 
-        print(f"[BatchOpenAIWorker] submitted batch {batch.id} ({len(worklist_entries)} entries)")
+        logger.info("Submitted batch %s (%d entries)", batch.id, len(worklist_entries))
 
         return BatchJob(batch_id=batch.id, provider_name="openai")
 
@@ -95,7 +98,7 @@ class BatchOpenAIWorker(BatchWorker):
         if batch.status not in ["completed", "failed", "cancelled", "expired"]:
             return BatchResult(status="pending", cache_keys=[], results=[])
 
-        print(f"[BatchOpenAIWorker] downloaded batch {batch.id} (status={batch.status})")
+        logger.info("Downloaded batch %s (status=%s)", batch.id, batch.status)
 
         completed_cache_keys = []
         completed_results = []

@@ -22,6 +22,13 @@ def _build_openai() -> Worker:
     client = AsyncOpenAI()
     return AsyncOpenAIWorker(client=client)
 
+def _build_openai_responses() -> Worker:
+    from gollum.provider.openai_responses import AsyncOpenAIResponsesWorker
+    from openai import AsyncOpenAI
+
+    client = AsyncOpenAI()
+    return AsyncOpenAIResponsesWorker(client=client)
+
 def _build_anthropic() -> Worker:
     from gollum.provider.anthropic import AsyncAnthropicWorker
     from anthropic import AsyncAnthropic
@@ -36,6 +43,7 @@ def get_default_registry():
         # build default registry
         _default_registry = ProviderRegistry()
         _default_registry.register_provider("openai", _build_openai)
+        _default_registry.register_provider("openai-responses", _build_openai_responses)
         _default_registry.register_provider("anthropic", _build_anthropic)
         # need to register both google and gemini
     return _default_registry

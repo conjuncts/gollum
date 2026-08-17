@@ -25,7 +25,7 @@
 # functions below the same way `system_fingerprint` is handled.
 # ============================================================
 
-from gollum.types.chat_completions import ChatCompletionResponseModel
+from gollum.types.chat_completions import ChatCompletionResponse
 
 # Reuse the message split/join logic — it's identical for request and
 # response messages (str|list content, tool_calls, function_call, etc.)
@@ -97,7 +97,7 @@ def _usage_from_flat(usage: dict) -> dict:
 # Public round-trip API
 # ============================================================
 
-def pl_serialize_chat_response(data: ChatCompletionResponseModel) -> dict:
+def pl_serialize_chat_response(data: ChatCompletionResponse) -> dict:
     """
     Converts a ChatCompletionResponse to a dictionary that is serializable by
     Polars, i.e. one whose shape matches ChatCompletionResponseSchema exactly.
@@ -126,7 +126,7 @@ def pl_serialize_chat_response(data: ChatCompletionResponseModel) -> dict:
     }
 
 
-def pl_deserialize_chat_response(data: dict) -> ChatCompletionResponseModel:
+def pl_deserialize_chat_response(data: dict) -> ChatCompletionResponse:
     """
     Converts a flattened dict (matching ChatCompletionResponseSchema, e.g. one
     row of `df_responses.to_dicts()`) back into an OpenAI-shaped

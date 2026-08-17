@@ -1,3 +1,7 @@
-Batch - in-memory storage of batch ids. if program interrupts, batch ids are lost.
+Quickstart
 
-batch - beefed up version of permacache. more hardened. resistant to interrupts and program closing. requires permastore behavior.
+1. Clone github repository
+2. Install uv
+3. `uv pip install -e .`
+4. Create .env file and put OPENAI_API_KEY=sk-proj-...
+5. Run scripts/batch_router_demo.py

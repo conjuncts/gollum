@@ -46,11 +46,21 @@ class ConcurrentWorklist(Worklist):
         task.add_done_callback(self._pending_tasks.discard)
 
     async def _process_entry(self, entry: WorklistEntry):
-        if self._semaphore is not None:
-            async with self._semaphore:
+        # This task is never awaited by kickstart_work's caller (that's the
+        # point -- see kickstart_work's docstring), so if _process_entry_inner
+        # raises here, nothing else will ever observe it. Without this
+        # try/except the exception dies silently inside the task and
+        # entry._future is never resolved, hanging every `await entry`
+        # forever instead of raising. Route it through entry.fail() so it
+        # surfaces where it's actually awaited.
+        try:
+            if self._semaphore is not None:
+                async with self._semaphore:
+                    await self._process_entry_inner(entry)
+            else:
                 await self._process_entry_inner(entry)
-        else:
-            await self._process_entry_inner(entry)
+        except Exception as exc:
+            entry.fail(exc)
 
     def _next_worker_order(self) -> list:
         """

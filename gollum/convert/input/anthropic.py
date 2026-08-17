@@ -1,21 +1,25 @@
 """
-Adapter: OpenAI ChatCompletionRequest -> Anthropic Messages request.
+Adapter: OpenAI ChatCompletionRequest <-> Anthropic Messages request.
 
 Reference (Anthropic): https://docs.anthropic.com/en/api/messages
 Reference (OpenAI):    https://platform.openai.com/docs/api-reference/chat/create
 
-The conversion is one-directional (OpenAI -> Anthropic); fields with no
-Anthropic equivalent (logprobs, n, seed, response_format, ...) are dropped.
+`to_anthropic_request` (OpenAI -> Anthropic) drops fields with no Anthropic
+equivalent (logprobs, n, seed, ...); `from_anthropic_request` (Anthropic ->
+OpenAI) drops fields with no ChatCompletions equivalent (top_k, thinking,
+service_tier, container, ...) by returning them in a second `extras` dict
+instead, mirroring how `to_anthropic_request` accepts them.
 """
 
 import json
 import re
-from typing import List, Literal, Optional, Union, cast
+from typing import Any, Dict, List, Literal, Optional, Tuple, Union, cast
 
 from gollum.types.anthropic import (
     AnthropicContentBlockParam,
     AnthropicImageSource,
     AnthropicMessageParam,
+    AnthropicOutputConfig,
     AnthropicRequest,
     AnthropicSystemParam,
     AnthropicThinkingConfig,
@@ -219,6 +223,30 @@ def _tool_choice_to_anthropic(tool_choice) -> AnthropicToolChoiceParam:
     raise TypeError(f"Unsupported OpenAI tool_choice type: {type(tool_choice).__name__}")
 
 
+# ---------- structured outputs ----------
+
+def _response_format_to_output_config(response_format: Optional[dict]) -> Optional[AnthropicOutputConfig]:
+    """OpenAI `response_format` -> Anthropic `output_config`.
+
+    See https://platform.claude.com/docs/en/build-with-claude/structured-outputs
+    Anthropic's structured outputs only support a JSON-schema-constrained
+    format (no schema-less `json_object` equivalent), so anything else raises.
+    """
+    if response_format is None:
+        return None
+    rtype = response_format.get("type")
+    if rtype == "text":
+        return None
+    if rtype != "json_schema":
+        raise NotImplementedError(
+            f"OpenAI response_format type {rtype!r} has no Anthropic equivalent"
+        )
+    schema = (response_format.get("json_schema") or {}).get("schema")
+    if schema is None:
+        raise ValueError("response_format.json_schema.schema is required")
+    return {"format": {"type": "json_schema", "schema": schema}}
+
+
 # ---------- request ----------
 
 def to_anthropic_request(
@@ -283,6 +311,7 @@ def to_anthropic_request(
 
     _set_if_present(out, "thinking", thinking)
     _set_if_present(out, "service_tier", service_tier)
+    _set_if_present(out, "output_config", _response_format_to_output_config(request.get("response_format")))
 
     # Anthropic only accepts metadata.user_id; fold OpenAI `user` in as well.
     metadata: dict = {}
@@ -293,3 +322,241 @@ def to_anthropic_request(
     _set_if_present(out, "metadata", metadata or None)
 
     return cast(AnthropicRequest, out)
+
+
+# ==================== Anthropic -> OpenAI ====================
+
+# ---------- content ----------
+
+def _image_source_to_url(source: Optional[dict]) -> dict:
+    """Anthropic image `source` -> OpenAI `image_url` part."""
+    source = source or {}
+    stype = source.get("type")
+    if stype == "base64":
+        media_type = source.get("media_type", "")
+        data = source.get("data", "")
+        return {"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{data}"}}
+    if stype == "url":
+        return {"type": "image_url", "image_url": {"url": source.get("url", "")}}
+    raise NotImplementedError(f"Anthropic image source type {stype!r} has no OpenAI equivalent")
+
+
+def _block_to_content_part(block: dict) -> dict:
+    """Anthropic content block -> OpenAI content part."""
+    btype = block.get("type")
+    if btype == "text":
+        return {"type": "text", "text": block.get("text") or ""}
+    if btype == "image":
+        return _image_source_to_url(block.get("source"))
+    raise NotImplementedError(
+        f"Anthropic content block type {btype!r} has no OpenAI equivalent"
+    )
+
+
+def _anthropic_content_to_openai(
+    content: Optional[Union[str, List[dict]]],
+) -> Optional[Union[str, List[dict]]]:
+    """Anthropic content (str | list[block]) -> OpenAI content (str | list[part])."""
+    if content is None:
+        return None
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = [b for b in content if b.get("type") in ("text", "image")]
+        return [_block_to_content_part(b) for b in parts]
+    raise TypeError(f"Unsupported Anthropic content: {type(content).__name__}")
+
+
+# ---------- messages ----------
+
+def _tool_use_blocks_to_calls(blocks: List[dict]) -> List[dict]:
+    """Anthropic `tool_use` blocks -> OpenAI assistant `tool_calls`."""
+    return [
+        {
+            "id": b.get("id", ""),
+            "type": "function",
+            "function": {
+                "name": b.get("name", ""),
+                "arguments": json.dumps(b.get("input", {}) or {}),
+            },
+        }
+        for b in blocks
+        if b.get("type") == "tool_use"
+    ]
+
+
+def _user_message_to_openai(message: dict) -> List[dict]:
+    """Anthropic user message -> OpenAI message(s).
+
+    A user message can carry `tool_result` blocks alongside (or instead of)
+    plain content; each `tool_result` becomes its own OpenAI `tool` message,
+    since OpenAI has no way to nest a tool result inside a user message.
+    """
+    content = message.get("content")
+    if isinstance(content, str) or content is None:
+        return [{"role": "user", "content": content or ""}]
+
+    tool_results = [b for b in content if b.get("type") == "tool_result"]
+    other_blocks = [b for b in content if b.get("type") != "tool_result"]
+
+    out: List[dict] = []
+    if other_blocks or not tool_results:
+        out.append({"role": "user", "content": _anthropic_content_to_openai(other_blocks)})
+    for b in tool_results:
+        tool_message: dict = {
+            "role": "tool",
+            "tool_call_id": b.get("tool_use_id", ""),
+            "content": _anthropic_content_to_openai(b.get("content")) or "",
+        }
+        _set_if_present(tool_message, "is_error", b.get("is_error"))
+        out.append(tool_message)
+    return out
+
+
+def _assistant_message_to_openai(message: dict) -> dict:
+    """Anthropic assistant message -> OpenAI assistant message."""
+    content = message.get("content")
+    if isinstance(content, str) or content is None:
+        return {"role": "assistant", "content": content}
+
+    text_blocks = [b for b in content if b.get("type") == "text"]
+    tool_use_blocks = [b for b in content if b.get("type") == "tool_use"]
+
+    text = "".join(b.get("text") or "" for b in text_blocks)
+    out: dict = {"role": "assistant", "content": text or None}
+    tool_calls = _tool_use_blocks_to_calls(tool_use_blocks)
+    if tool_calls:
+        out["tool_calls"] = tool_calls
+    return out
+
+
+def _anthropic_message_to_openai(message: dict) -> List[dict]:
+    """Convert one Anthropic message to one or more OpenAI chat messages."""
+    role = message.get("role")
+    if role == "user":
+        return _user_message_to_openai(message)
+    if role == "assistant":
+        return [_assistant_message_to_openai(message)]
+    raise ValueError(f"Unsupported Anthropic message role: {role!r}")
+
+
+def _system_to_message(system: Optional[Union[str, List[dict]]]) -> Optional[dict]:
+    """Anthropic top-level `system` -> an OpenAI `role: "system"` message."""
+    if system is None:
+        return None
+    if isinstance(system, str):
+        return {"role": "system", "content": system}
+    text = "".join(b.get("text") or "" for b in system if b.get("type") == "text")
+    return {"role": "system", "content": text}
+
+
+# ---------- tools ----------
+
+def _tool_from_anthropic(tool: dict) -> dict:
+    """Anthropic tool -> OpenAI tool ({type: "function", function: {...}})."""
+    if tool.get("type") not in (None, "custom"):
+        raise NotImplementedError(
+            f"Anthropic tool type {tool.get('type')!r} has no OpenAI equivalent"
+        )
+    function: dict = {
+        "name": tool.get("name") or "",
+        "parameters": tool.get("input_schema") or {"type": "object"},
+    }
+    _set_if_present(function, "description", tool.get("description"))
+    return {"type": "function", "function": function}
+
+
+def _tool_choice_from_anthropic(tool_choice: dict) -> Union[str, dict]:
+    """Anthropic tool_choice -> OpenAI tool_choice (str | {type: "function", ...})."""
+    ttype = tool_choice.get("type")
+    if ttype == "auto":
+        return "auto"
+    if ttype == "none":
+        return "none"
+    if ttype == "any":
+        return "required"
+    if ttype == "tool":
+        return {"type": "function", "function": {"name": tool_choice.get("name")}}
+    raise ValueError(f"Unknown Anthropic tool_choice type: {ttype!r}")
+
+
+# ---------- structured outputs ----------
+
+def _output_config_to_response_format(
+    output_config: Optional[dict],
+) -> Optional[dict]:
+    """Anthropic `output_config` -> OpenAI `response_format`."""
+    if output_config is None:
+        return None
+    fmt = output_config.get("format") or {}
+    if fmt.get("type") != "json_schema":
+        raise NotImplementedError(
+            f"Anthropic output_config format {fmt.get('type')!r} has no OpenAI equivalent"
+        )
+    schema = fmt.get("schema")
+    if schema is None:
+        raise ValueError("output_config.format.schema is required")
+    return {"type": "json_schema", "json_schema": {"name": "response", "schema": schema}}
+
+
+# ---------- request ----------
+
+def from_anthropic_request(
+    request: AnthropicRequest,
+) -> Tuple[ChatCompletionRequest, Dict[str, Any]]:
+    """
+    Convert an Anthropic Messages request to an OpenAI-style ChatCompletionRequest.
+
+    Returns a `(chat_completion_request, extras)` tuple: `extras` carries
+    Anthropic fields with no ChatCompletions equivalent (`thinking`, `top_k`,
+    `service_tier`), symmetric with the keyword-only arguments
+    `to_anthropic_request` accepts via its own `extras` parameter.
+
+    Raises:
+        NotImplementedError: for Anthropic features with no OpenAI equivalent
+            (document content blocks, non-function tools).
+    """
+    messages: List[dict] = []
+
+    system_message = _system_to_message(request.get("system"))
+    if system_message is not None:
+        messages.append(system_message)
+
+    for m in request.get("messages") or []:
+        messages.extend(_anthropic_message_to_openai(m))
+
+    out: dict = {
+        "model": request["model"],
+        "messages": messages,
+        "max_tokens": request["max_tokens"],
+    }
+
+    stop_sequences = request.get("stop_sequences")
+    if stop_sequences is not None:
+        out["stop"] = stop_sequences
+
+    for key in ("temperature", "top_p", "stream"):
+        _set_if_present(out, key, request.get(key))
+
+    tools = request.get("tools")
+    if tools:
+        out["tools"] = [_tool_from_anthropic(t) for t in tools]
+
+    tool_choice = request.get("tool_choice")
+    if tool_choice is not None:
+        result = _tool_choice_from_anthropic(tool_choice)
+        out["tool_choice"] = result
+        if isinstance(tool_choice, dict) and tool_choice.get("disable_parallel_tool_use") is True:
+            out["parallel_tool_calls"] = False
+
+    _set_if_present(out, "response_format", _output_config_to_response_format(request.get("output_config")))
+
+    metadata = request.get("metadata") or {}
+    _set_if_present(out, "user", metadata.get("user_id"))
+
+    extras: Dict[str, Any] = {}
+    _set_if_present(extras, "thinking", request.get("thinking"))
+    _set_if_present(extras, "top_k", request.get("top_k"))
+    _set_if_present(extras, "service_tier", request.get("service_tier"))
+
+    return cast(ChatCompletionRequest, out), extras

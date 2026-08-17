@@ -8,14 +8,7 @@ from aiohttp import ClientSession
 from gollum.client.base import GollumClient
 from gollum.client.litellm_helper import LiteLLMWorklistEntry
 from gollum.convert.input.litellm import litellm_completion_to_request
-from gollum.folder.file_manager import FileManager
-from gollum.permacache.cache_method import CacheMethod
-from gollum.permacache.duckdb_permacache import DuckDBPermacache
-from gollum.provider.provider_registry import get_default_registry
 from gollum.types.chat_completions import AnthropicThinkingParam, ChatCompletionResponseModel, OpenAIWebSearchOptions
-from gollum.worklist.concurrent_worklist import ConcurrentWorklist
-from gollum.worklist.workers.permacache_worker import PermacacheWorker
-from gollum.worklist.workers.polymorphic_worker import AsyncPolymorphicWorker
 
 
 if TYPE_CHECKING:
@@ -31,30 +24,11 @@ if TYPE_CHECKING:
     from pydantic import BaseModel
 
 
-def _create_gollum_client(location: Union[Path, str] = None) -> GollumClient:
-    # worklist = EagerWorklist()
-    worklist = ConcurrentWorklist()
-
-    # worker = MockWorker(parroted_value="Hello, World!")
-
-    # from openai import AsyncOpenAI
-    # worker = AsyncOpenAIWorker(client=AsyncOpenAI())
-    if location is not None:
-        # permacache = PolarsPermacache(FileManager(".gollum"), flush_threshold=10)
-        permacache = DuckDBPermacache(FileManager(location), flush_threshold=10)
-        cache_method = CacheMethod()
-        cacher = PermacacheWorker(permacache, cache_method)
-        worklist.enroll_cache_worker(cacher)
-
-    worker = AsyncPolymorphicWorker(provider_registry=get_default_registry())
-    worklist.enroll_worker(worker)
-    return GollumClient(worklist)
-
 _singleton = None
 def _get_singleton_client() -> GollumClient:
     global _singleton
     if _singleton is None:
-        _singleton = _create_gollum_client()
+        _singleton = GollumClient.create()
     return _singleton
 
 
@@ -385,7 +359,7 @@ class GollumRouter:
                 storage_destination = ".gollum"
             else:
                 storage_destination = None
-            client = _create_gollum_client(location=storage_destination)
+            client = GollumClient.create(cache_location=storage_destination)
         self.client = client
 
     @wraps(acompletion)

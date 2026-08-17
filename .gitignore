@@ -14,3 +14,4 @@ experiments
 .coverage
 .env
 .gollum
+profile.out
